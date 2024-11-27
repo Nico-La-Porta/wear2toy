@@ -60,6 +60,39 @@ def build_dataset(path):
     
     return dataset_traces
 
+# Funzione per aggiungere etichette (activity) ai dati
+def add_labels_to_dataset(dataset):
+    """
+    Aggiunge l'etichetta 'activity' a ciascun elemento del dataset.
+    
+    Parameters:
+        dataset (list of dicts): Il dataset delle tracce, dove ogni traccia è un dizionario
+                                  con 'TraceID' e 'TraceData'.
+    
+    Returns:
+        new_dataset_labeled (list of dicts): Un nuovo dataset con la colonna 'activity' aggiunta.
+    """
+    new_dataset_labeled = []  # Lista per memorizzare il nuovo dataset con le etichette
+
+    for trace in dataset:
+        # Estrazione del numero dell'attività
+        activity = int(trace['TraceID'].split('_')[2].replace("Activity", ""))  # Eseguo parsing dell'activity
+        activity = activity - 1  #sottraggo 1 perchè successivamene mi servono etichette da 0 a 28 (e non da 1 a 29)
+        
+        original_data = trace['TraceData']
+
+        # Creo la nuova colonna activity
+        activity_column = np.full((original_data.shape[0], 1), activity)
+        new_data = np.hstack((original_data, activity_column))  # Aggiungo l'activity_column ai dati originali
+
+        # Aggiungo una nuova traccia al nuovo dataset
+        new_trace = trace.copy()  # Creo una copia del dizionario
+        new_trace['TraceData'] = new_data  # Aggiorno TraceData
+        new_dataset_labeled.append(new_trace)
+
+    return new_dataset_labeled
+
+
 def main():
     """
     Funzione principale per eseguire il processo.
@@ -67,17 +100,25 @@ def main():
     # Percorso della cartella contenente i file .npz
     path = 'C:\\codes\\HumanActivityRecognition\\data\\raw\\train'
 
-    # Costruisci il dataset
+    # Costruisco il dataset
     dataset_traces_train = build_dataset(path)
 
-    # Verifica il risultato
+    # Aggiungo le etichette al dataset
+    dataset_traces_labeled = add_labels_to_dataset(dataset_traces_train)
+
+    # Verifica ris
     print(f"Total number of traces in datasetTrain: {len(dataset_traces_train)}")
     
+
     # Esempio di stampa del primo elemento
     if dataset_traces_train:
         first_trace = dataset_traces_train[0]
         print(f"First trace ID: {first_trace['TraceID']}")
         print(f"Shape of first trace data: {first_trace['TraceData'].shape}")
 
+    if dataset_traces_labeled:
+        first_trace = dataset_traces_labeled[0]
+        print(f"First trace ID labeled: {first_trace['TraceID']}")
+        print(f"Shape of first trace data labeled: {first_trace['TraceData'].shape}")
 if __name__ == "__main__":
     main()
