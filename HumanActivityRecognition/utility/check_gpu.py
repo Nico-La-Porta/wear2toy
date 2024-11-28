@@ -10,9 +10,3 @@ def check_gpu_availability():
         print('No GPU available, training on CPU; consider making n_epochs very small.')
         return False
 
-def main():
-
-    train_on_gpu = check_gpu_availability()
-
-if __name__ == "__main__":
-    main()
