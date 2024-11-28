@@ -45,9 +45,6 @@ def apply_sliding_window(new_dataset_labeled, sliding_window_length, sliding_win
 
     # Reshape finale per Conv1D
     X_train = X_train.reshape((-1, sliding_window_length, nb_sensor_channels))
-    
-    print("X_train shape:", X_train.shape)
-    print("Y_train shape:", Y_train.shape)
 
     return X_train, Y_train
 
