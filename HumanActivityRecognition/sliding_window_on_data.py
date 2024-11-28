@@ -1,5 +1,7 @@
 import numpy as np
 
+from HumanActivityRecognition.utils import sliding_window
+
 # Funzione per applicare la sliding window sui dati di train
 #prende in ingresso la lista di dizionari con TraceId e TraceData, la lunghezza della finestra, l'overlap (passo della finestra), e il numero di canali (feature)
 #mi restituisce X_Train e Y_train (input e lable in formato utile per poi fare il train)
@@ -49,11 +51,3 @@ def apply_sliding_window(new_dataset_labeled, sliding_window_length, sliding_win
 
     return X_train, Y_train
 
-# Funzione principale per eseguire il processo
-def main():
-
-    # Applicazione della sliding window
-    X_train, Y_train = apply_sliding_window(new_dataset_labeled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
-
-if __name__ == "__main__":
-    main()

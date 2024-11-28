@@ -1,3 +1,6 @@
+import torch
+import torch.nn as nn
+
 def init_weights(m):
     if type(m) == nn.LSTM:
         for name, param in m.named_parameters():
