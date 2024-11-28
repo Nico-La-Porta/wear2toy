@@ -1,6 +1,8 @@
 import os
 import numpy as np
 
+#from HumanActivityRecognition.app_config import PROCESSED_DATA_DIR_TRAIN
+
 #funzioni per:
     # 1)estituire una lista di file con una specifica estensione
     # 2)Caricare annotazioni e segnali da file .npz
@@ -98,7 +100,7 @@ def main():
     Funzione principale per eseguire il processo.
     """
     # Percorso della cartella contenente i file .npz
-    path = 'C:\\codes\\HumanActivityRecognition\\data\\raw\\train'
+    path = PROCESSED_DATA_DIR_TRAIN
 
     # Costruisco il dataset
     dataset_traces_train = build_dataset(path)
