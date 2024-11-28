@@ -4,20 +4,16 @@ import numpy as np
 #from HumanActivityRecognition.app_config import PROCESSED_DATA_DIR_TRAIN
 
 #funzioni per:
-    # 1)estituire una lista di file con una specifica estensione
+    # 1)restituire una lista di file con una specifica estensione
     # 2)Caricare annotazioni e segnali da file .npz
     # 3)Costruire dataset a partire da file .npz (annotazioni e segnali) 
 
 def get_files_in_directory(path, extension):
-    """
-    Restituisce una lista di file con una specifica estensione in una directory.
-    """
+
     return [f for f in os.listdir(path) if f.endswith(extension)]
 
 def load_trace_data(path, annotations_file, signals_file):
-    """
-    Carica i dati di annotazioni e segnali da file .npz.
-    """
+
     annotations_data = np.load(os.path.join(path, annotations_file))
     signals_data = np.load(os.path.join(path, signals_file))
     annotations = annotations_data['annotations']
@@ -30,9 +26,7 @@ def load_trace_data(path, annotations_file, signals_file):
     return annotations, signals
 
 def build_dataset(path):
-    """
-    Costruisce il dataset a partire dai file .npz di annotazioni e segnali.
-    """
+
     # Ottieni file di annotazioni e segnali
     annotations_files = get_files_in_directory(path, '_ann.npz')
     signals_files = get_files_in_directory(path, '_sig.npz')
@@ -64,16 +58,7 @@ def build_dataset(path):
 
 # Funzione per aggiungere etichette (activity) ai dati
 def add_labels_to_dataset(dataset):
-    """
-    Aggiunge l'etichetta 'activity' a ciascun elemento del dataset.
-    
-    Parameters:
-        dataset (list of dicts): Il dataset delle tracce, dove ogni traccia è un dizionario
-                                  con 'TraceID' e 'TraceData'.
-    
-    Returns:
-        new_dataset_labeled (list of dicts): Un nuovo dataset con la colonna 'activity' aggiunta.
-    """
+
     new_dataset_labeled = []  # Lista per memorizzare il nuovo dataset con le etichette
 
     for trace in dataset:
