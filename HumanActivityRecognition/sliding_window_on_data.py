@@ -21,10 +21,10 @@ def apply_sliding_window(new_dataset_labeled, sliding_window_length, sliding_win
         print("Y_trace shape:", Y_trace.shape)
 
         # Applicazione della sliding window
-        X_windows = sliding_window(X_trace, ws=(sliding_window_length, X_trace.shape[1]), ss=(sliding_window_step, X_trace.shape[1]))
+        X_windows = data_processing.sliding_window(X_trace, ws=(sliding_window_length, X_trace.shape[1]), ss=(sliding_window_step, X_trace.shape[1]))
         print("X_windows shape:", X_windows.shape)
 
-        Y_windows_full = sliding_window(Y_trace.reshape(-1, 1), ws=(sliding_window_length, 1), ss=(sliding_window_step, 1))
+        Y_windows_full = data_processing.sliding_window(Y_trace.reshape(-1, 1), ws=(sliding_window_length, 1), ss=(sliding_window_step, 1))
 
         # Estrai l'ultima etichetta di ogni finestra
         Y_windows = np.asarray([window[-1] for window in Y_windows_full])
