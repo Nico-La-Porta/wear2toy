@@ -4,7 +4,10 @@ from HumanActivityRecognition.app_config import RAW_DATA_DIR_TEST
 
 from HumanActivityRecognition.utils import data_preprocessing
 
-from HumanActivityRecognition import run_config
+from HumanActivityRecognition.run_config import SLIDING_WINDOW_LENGTH
+from HumanActivityRecognition.run_config import NB_SENSOR_CHANNELS
+from HumanActivityRecognition.run_config import SLIDING_WINDOW_STEP
+
 from HumanActivityRecognition import sliding_window_on_data
 
 from models.DeepConvLSTM import DeepConvLSTM
@@ -12,8 +15,6 @@ from models.DeepConvLSTM import DeepConvLSTM
 from HumanActivityRecognition.utils import data_processing
 from HumanActivityRecognition import init_weights
 from HumanActivityRecognition import train
-
-import train
 
 #BUILD DATASET DI TRAIN E DI TEST 
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
@@ -46,9 +47,9 @@ if dataset_train_labled:
 
 #SLIDING WINDOW SUI DATI DI TRAIN E TEST, IN OUTPUT AVRO' UNA MATRICE X_TRAIN E X_TEST con le dimensioni attese per il modello
 
-X_Train, Y_Train=sliding_window_on_data.apply_sliding_window(dataset_train_labled,run_config.SLIDING_WINDOW_LENGTH, run_config.SLIDING_WINDOW_STEP, run_config.NB_SENSOR_CHANNELS)
+X_Train, Y_Train=sliding_window_on_data.apply_sliding_window(dataset_train_labled,SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
-X_Test, Y_Test=sliding_window_on_data.apply_sliding_window(dataset_test_labled,run_config.SLIDING_WINDOW_LENGTH, run_config.SLIDING_WINDOW_STEP, run_config.NB_SENSOR_CHANNELS)
+X_Test, Y_Test=sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
 
 #Stampe di debug
@@ -78,3 +79,4 @@ net= DeepConvLSTM()
 #train
 
 train.train(net, X_Train,Y_Train,X_Test,Y_Test,epochs=10,batch_size=84, lr=0.01)
+
