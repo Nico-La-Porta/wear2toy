@@ -1,6 +1,8 @@
 from torch import nn
 import torch.nn.functional as F
-from HumanActivityRecognition import run_config
+from HumanActivityRecognition.run_config import NB_SENSOR_CHANNELS
+from HumanActivityRecognition.run_config import SLIDING_WINDOW_LENGTH
+
 
 from HumanActivityRecognition.utils import  check_gpu 
 
@@ -27,7 +29,7 @@ class DeepConvLSTM(nn.Module):
              
         #PRENDE IN INGRESSO il numrro di canali, applica n filtri di dimensione filtersize
         #L'OUTPUT sarà (batcsize, nfilters, output_lenght)
-        self.conv1 = nn.Conv1d(run_config.NB_SENSOR_CHANNELS, n_filters, filter_size)
+        self.conv1 = nn.Conv1d(NB_SENSOR_CHANNELS, n_filters, filter_size)
         self.conv2 = nn.Conv1d(n_filters, n_filters, filter_size)
         self.conv3 = nn.Conv1d(n_filters, n_filters, filter_size)
         self.conv4 = nn.Conv1d(n_filters, n_filters, filter_size)
@@ -47,7 +49,7 @@ class DeepConvLSTM(nn.Module):
 
         
         #-1 sta calcolando automaticamente la dimensione rimanente (batchsize),
-        x = x.reshape(-1, run_config.NB_SENSOR_CHANNELS, run_config.SLIDING_WINDOW_LENGTH)
+        x = x.reshape(-1, NB_SENSOR_CHANNELS, SLIDING_WINDOW_LENGTH)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))

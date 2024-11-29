@@ -7,8 +7,8 @@ from HumanActivityRecognition.utils import data_processing
 #mi restituisce X_Train e Y_train (input e lable in formato utile per poi fare il train)
 def apply_sliding_window(new_dataset_labeled, sliding_window_length, sliding_window_step, nb_sensor_channels):
 
-    X_train = []
-    Y_train = []
+    X= []
+    Y= []
 
     for trace in new_dataset_labeled:
         data = trace['TraceData']
@@ -31,20 +31,19 @@ def apply_sliding_window(new_dataset_labeled, sliding_window_length, sliding_win
         print("Y_window shape:", Y_windows.shape)
 
         # Aggiungi le finestre ottenute a X_train e Y_train
-        X_train.append(X_windows)
-        Y_train.append(Y_windows)
+        X.append(X_windows)
+        Y.append(Y_windows)
 
     # Conversione X_train e Y_train in numpy array per facilità di elaborazione successiva
-    X_train = np.vstack(X_train)  # Concatenazione di tutte le finestre di X
-    Y_train = np.concatenate(Y_train)  # Concatenazione di tutte le finestre di Y
+    X = np.vstack(X)  # Concatenazione di tutte le finestre di X
+    Y = np.concatenate(Y)  # Concatenazione di tutte le finestre di Y
 
     # Riscalatura dei dati (Conversione nei formati desiderati)
 
-    X_train = X_train.astype(np.float32)
-    Y_train = Y_train.astype(np.uint8)
-
+    X = X.astype(np.float32)
+    Y = Y.reshape(len(Y)).astype(np.uint8)
     # Reshape finale per Conv1D
-    X_train = X_train.reshape((-1, sliding_window_length, nb_sensor_channels))
+    X = X.reshape((-1, sliding_window_length, nb_sensor_channels))
 
-    return X_train, Y_train
+    return X, Y
 
