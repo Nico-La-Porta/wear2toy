@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 from sklearn import metrics
+from sklearn.utils import shuffle
 from HumanActivityRecognition.utils import data_processing, check_gpu 
+from HumanActivityRecognition import plot
 
 train_on_gpu=check_gpu.check_gpu_availability()
 
@@ -13,16 +15,24 @@ def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=84, lr=0.
     #del gradinete nella dimensione desiderata e ridurre le oscillazioni
     #wight_decay: regolarizzazione L2 per prevenire overfitting
     
-    #prova con altri ottimizzatori
+    
     opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    #opt = torch.optim.RMSprop(net.parameters(), lr=lr, alpha=0.99, weight_decay=1e-4, momentum=0.9)
+    #opt = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-4)
     criterion = nn.CrossEntropyLoss()
 
     if train_on_gpu:
         net.cuda()
 
+
+    train_loss_history = [] 
+    val_loss_history = [] 
+    val_accuracy_history = []
+
     #per ogni epoca il modello viene allenato su tutti i dati di train
     for e in range(epochs):
         
+        X_train, Y_train = shuffle(X_train, Y_train) # Shuffle dei dati all'inizio di ogni epoca
         # initialize hidden state: crea uno stato nascosto di dimensione (n_layer, batchsize,n_hidden)
         h = net.init_hidden(batch_size)
         train_losses = []
@@ -51,6 +61,7 @@ def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=84, lr=0.
             loss.backward()
             opt.step()
 
+        train_loss_history.append(np.mean(train_losses))
         # Valutazione sui dati di validazione
         val_h = net.init_hidden(batch_size)
         val_losses = []
@@ -74,7 +85,10 @@ def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=84, lr=0.
                 equals = top_class == targets.view(*top_class.shape).long()
                 accuracy += torch.mean(equals.type(torch.FloatTensor))
                 f1score += metrics.f1_score(top_class.cpu(), targets.view(*top_class.shape).long().cpu(), average='weighted')
+        
 
+        val_loss_history.append(np.mean(val_losses)) 
+        val_accuracy_history.append(accuracy / (len(X_test) // batch_size))
         net.train()  # reset to train mode after iterationg through validation data
 
         print(f"Epoch: {e+1}/{epochs}... "
@@ -82,3 +96,6 @@ def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=84, lr=0.
               f"Val Loss: {np.mean(val_losses):.4f}... "
               f"Val Acc: {accuracy / (len(X_test) // batch_size):.4f}... "
               f"F1-Score: {f1score / (len(X_test) // batch_size):.4f}")
+        
+    plot.plot_learning_curves(train_loss_history, val_loss_history, val_accuracy_history)
+

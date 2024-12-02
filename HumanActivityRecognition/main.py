@@ -15,6 +15,7 @@ from models.DeepConvLSTM import DeepConvLSTM
 from HumanActivityRecognition.utils import data_processing
 from HumanActivityRecognition import init_weights
 from HumanActivityRecognition import train
+from HumanActivityRecognition.utils import data_analysis
 
 #BUILD DATASET DI TRAIN E DI TEST 
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
@@ -31,6 +32,16 @@ print(f"Shape of first trace data: {first_trace['TraceData'].shape}")
 #AGGIUNTA LABLE AI DATASET
 dataset_train_labled=data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
 dataset_test_labled=data_preprocessing.add_labels_to_dataset(datasetTracesTest)
+
+
+#DISTRIBUZIONE DATASET 
+print(f"Distribuzione etichette dataset di train")
+data_analysis.plot_label_distribution(dataset_train_labled)
+print(f"Distribuzione etichette dataset di test")
+data_analysis.plot_label_distribution(dataset_test_labled)
+
+
+
 
 #stampe di verifica
 first_trace_labled=dataset_train_labled[0]
@@ -50,6 +61,11 @@ if dataset_train_labled:
 X_Train, Y_Train=sliding_window_on_data.apply_sliding_window(dataset_train_labled,SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
 X_Test, Y_Test=sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
+
+print(f"Distribuzione windows dataset di train")
+data_analysis.plot_window_distribution(X_Train,Y_Train)
+print(f"Distribuzione windows dataset di test")
+data_analysis.plot_window_distribution(X_Test,Y_Test)
 
 
 #Stampe di debug
