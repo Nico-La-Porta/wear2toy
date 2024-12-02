@@ -17,6 +17,8 @@ from HumanActivityRecognition import init_weights
 from HumanActivityRecognition import train
 from HumanActivityRecognition.utils import data_analysis
 
+init_weights.set_seed(42)
+
 #BUILD DATASET DI TRAIN E DI TEST 
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
 datasetTracesTest=data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
@@ -92,6 +94,7 @@ print(f"\nEtichette uniche in Y_train: {unique_labels}")
 
 net= DeepConvLSTM()
 
+net.apply(init_weights.init_weights)
 #train
 
 train.train(net, X_Train,Y_Train,X_Test,Y_Test,epochs=10,batch_size=84, lr=0.01)

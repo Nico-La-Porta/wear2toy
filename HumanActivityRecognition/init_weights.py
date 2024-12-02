@@ -1,5 +1,15 @@
 import torch
 import torch.nn as nn
+import numpy as np
+import random
+def set_seed(seed):
+    torch.manual_seed(seed) #per tutte le operazioni che utilizzano il generatore di numeri casuali di PyTorch
+    torch.cuda.manual_seed_all(seed) #se si usa gpu
+    np.random.seed(seed) #per la libreria numpy
+    random.seed(seed) #per la libreria di Python random
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 
 def init_weights(m):
     if type(m) == nn.LSTM:
