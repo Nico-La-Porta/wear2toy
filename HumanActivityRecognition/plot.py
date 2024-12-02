@@ -1,0 +1,20 @@
+import matplotlib.pyplot as plt
+
+def plot_learning_curves(train_loss, val_loss, val_acc): 
+    epochs = range(1, len(train_loss) + 1) 
+    plt.figure(figsize=(14, 5)) 
+    plt.subplot(1, 2, 1) 
+    plt.plot(epochs, train_loss, 'b', label='Train Loss') 
+    plt.plot(epochs, val_loss, 'r', label='Val Loss') 
+    plt.title('Training and Validation Loss') 
+    plt.xlabel('Epochs') 
+    plt.ylabel('Loss') 
+    plt.legend() 
+    plt.subplot(1, 2, 2) 
+    plt.plot(epochs, val_acc, 'g', label='Val Accuracy') 
+    plt.title('Validation Accuracy') 
+    plt.xlabel('Epochs') 
+    plt.ylabel('Accuracy') 
+    plt.legend() 
+    plt.tight_layout() 
+    plt.show()
