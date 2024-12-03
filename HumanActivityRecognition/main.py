@@ -91,8 +91,9 @@ print(f"\nEtichette uniche in Y_train: {unique_labels}")
 #creo istanza modello
 
 net= DeepConvLSTM()
+net.apply(init_weights.init_weights) 
 
 #train
 
-train.train(net, X_Train,Y_Train,X_Test,Y_Test,epochs=10,batch_size=84, lr=0.01)
+train.train(net, X_Train,Y_Train,X_Test,Y_Test,epochs=40,batch_size=84, lr=0.01)
 
