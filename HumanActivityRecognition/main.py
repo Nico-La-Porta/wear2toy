@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from HumanActivityRecognition.app_config import RAW_DATA_DIR_TRAIN
 from HumanActivityRecognition.app_config import RAW_DATA_DIR_TEST
 
@@ -16,6 +17,7 @@ from HumanActivityRecognition.utils import data_processing
 from HumanActivityRecognition import init_weights
 from HumanActivityRecognition import train
 from HumanActivityRecognition.utils import data_analysis
+import itertools
 
 init_weights.set_seed(42)
 
@@ -93,10 +95,45 @@ print(f"\nEtichette uniche in Y_train: {unique_labels}")
 #creo istanza modello
 
 net= DeepConvLSTM()
-net.apply(init_weights.init_weights) 
 
-net.apply(init_weights.init_weights)
-#train
+# Parametri da ottimizzare
+BATCH_SIZE = [8, 16, 32, 64, 128]
+LEARNING_RATE = np.logspace(-4, -1, 4)  # Equivale a [0.0001, 0.001, 0.01, 0.1]
 
-train.train(net, X_Train,Y_Train,X_Test,Y_Test,epochs=40,batch_size=84, lr=0.01)
+# Dati di addestramento e test (assicurati di definire questi dati)
+# X_Train, Y_Train, X_Test, Y_Test = I tuoi dati di addestramento e test
 
+# Dizionario per memorizzare i risultati
+results = []
+
+# Itera su tutte le combinazioni di batch_size e learning_rate
+for batch_size, lr in itertools.product(BATCH_SIZE, LEARNING_RATE):
+    print(f"Training with batch size {batch_size} and learning rate {lr}")
+    
+    # Esegui l'allenamento
+    train_loss, val_loss, val_acc = train.train(net, X_Train, Y_Train, X_Test, Y_Test, epochs=40, batch_size=batch_size, lr=lr)
+    
+    # Salva i risultati in un dizionario
+    results.append({
+        'batch_size': batch_size,
+        'learning_rate': lr,
+        'train_loss': train_loss,
+        'val_loss': val_loss,
+        'val_acc': val_acc
+    })
+
+# Ora puoi analizzare i risultati per determinare i migliori parametri
+best_result = min(results, key=lambda x: x['val_loss'])  # Usa il minimo della validation loss come criterio
+print(f"Best parameters: Batch size = {best_result['batch_size']}, Learning rate = {best_result['learning_rate']}")
+print(f"Validation Loss: {best_result['val_loss']}, Validation Accuracy: {best_result['val_acc']}")
+
+
+# Converti i risultati in un DataFrame
+df_results = pd.DataFrame(results)
+
+# Visualizza i risultati
+print(df_results)
+
+# Puoi anche ordinare per validation accuracy o validation loss
+df_results_sorted = df_results.sort_values(by='val_loss')  # Ordina per la loss di validazione
+print(df_results_sorted.head())  # Visualizza i primi 5 risultati
