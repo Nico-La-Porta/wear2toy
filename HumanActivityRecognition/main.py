@@ -17,123 +17,51 @@ from HumanActivityRecognition.utils import data_processing
 from HumanActivityRecognition import init_weights
 from HumanActivityRecognition import train
 from HumanActivityRecognition.utils import data_analysis
-import itertools
 
+import optuna
+
+# Impostazione il seed per la riproducibilità
 init_weights.set_seed(42)
 
-#BUILD DATASET DI TRAIN E DI TEST 
+# Crea il modello
+net = DeepConvLSTM()
+
+    
+# Prepara i dati
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
-datasetTracesTest=data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
+datasetTracesTest = data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
+dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
+dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
+X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(dataset_train_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
+X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
-#stampe di verifica
-print(f"Total number of traces in datasetTracesTrain: {len(datasetTracesTrain)}")
-print(f"Total number of traces in datasetTracesTest: {len(datasetTracesTest)}")
+# Funzione obiettivo per Optuna
+def objective(trial):
+    # vari iperparametri
 
-first_trace=datasetTracesTrain[0]
-print(f"Shape of first trace data: {first_trace['TraceData'].shape}")
-
-
-#AGGIUNTA LABLE AI DATASET
-dataset_train_labled=data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
-dataset_test_labled=data_preprocessing.add_labels_to_dataset(datasetTracesTest)
-
-
-#DISTRIBUZIONE DATASET 
-print(f"Distribuzione etichette dataset di train")
-data_analysis.plot_label_distribution(dataset_train_labled)
-print(f"Distribuzione etichette dataset di test")
-data_analysis.plot_label_distribution(dataset_test_labled)
-
-
-
-
-#stampe di verifica
-first_trace_labled=dataset_train_labled[0]
-print(f"TraceId: {first_trace_labled['TraceID']}")
-print(f"Shape of first trace data LABLED: {first_trace_labled['TraceData'].shape}")
-
-
-if dataset_train_labled:
-    for i,row in enumerate(dataset_train_labled[0]['TraceData']):
-        if i>=10:
-            break
-        print(",".join(map(str,row)))
-
-
-#SLIDING WINDOW SUI DATI DI TRAIN E TEST, IN OUTPUT AVRO' UNA MATRICE X_TRAIN E X_TEST con le dimensioni attese per il modello
-
-X_Train, Y_Train=sliding_window_on_data.apply_sliding_window(dataset_train_labled,SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
-
-X_Test, Y_Test=sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
-
-print(f"Distribuzione windows dataset di train")
-data_analysis.plot_window_distribution(X_Train,Y_Train)
-print(f"Distribuzione windows dataset di test")
-data_analysis.plot_window_distribution(X_Test,Y_Test)
-
-
-#Stampe di debug
-
-print("X_train shape:", X_Train.shape)
-print("Y_train shape:", Y_Train.shape)
-
-print("X_Test shape:", X_Test.shape)
-print("Y_Test shape:", Y_Test.shape)
-
-#visualizza le prime righe di X_train e Y_train
-print("\nPrime righe di X_train:")
-print(X_Train[:5])  # Stampa le prime 5 righe di X_train
-
-print("\nPrime righe di Y_train:")
-print(Y_Train[:5])  # Stampa le prime 5 etichette di Y_train
-
-# Stampa un riepilogo delle etichette uniche
-unique_labels = np.unique(Y_Train)
-print(f"\nEtichette uniche in Y_train: {unique_labels}")
-
-
-#creo istanza modello
-
-net= DeepConvLSTM()
-
-# Parametri da ottimizzare
-BATCH_SIZE = [8, 16, 32, 64, 128]
-LEARNING_RATE = np.logspace(-4, -1, 4)  # Equivale a [0.0001, 0.001, 0.01, 0.1]
-
-# Dati di addestramento e test (assicurati di definire questi dati)
-# X_Train, Y_Train, X_Test, Y_Test = I tuoi dati di addestramento e test
-
-# Dizionario per memorizzare i risultati
-results = []
-
-# Itera su tutte le combinazioni di batch_size e learning_rate
-for batch_size, lr in itertools.product(BATCH_SIZE, LEARNING_RATE):
-    print(f"Training with batch size {batch_size} and learning rate {lr}")
+    lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
     
     # Esegui l'allenamento
-    train_loss, val_loss, val_acc = train.train(net, X_Train, Y_Train, X_Test, Y_Test, epochs=40, batch_size=batch_size, lr=lr)
+    val_loss = train.train(net, X_Train, Y_Train, X_Test, Y_Test, epochs=5, batch_size=84, lr=lr)
     
-    # Salva i risultati in un dizionario
-    results.append({
-        'batch_size': batch_size,
-        'learning_rate': lr,
-        'train_loss': train_loss,
-        'val_loss': val_loss,
-        'val_acc': val_acc
-    })
+    return val_loss
 
-# Ora puoi analizzare i risultati per determinare i migliori parametri
-best_result = min(results, key=lambda x: x['val_loss'])  # Usa il minimo della validation loss come criterio
-print(f"Best parameters: Batch size = {best_result['batch_size']}, Learning rate = {best_result['learning_rate']}")
-print(f"Validation Loss: {best_result['val_loss']}, Validation Accuracy: {best_result['val_acc']}")
+# Creazione studio Optuna ottimizza, nel senso di minimizzare la loss in 100 prove
+study = optuna.create_study(direction='minimize')
+study.optimize(objective, n_trials=100)
+
+print(study.best_params)
 
 
-# Converti i risultati in un DataFrame
-df_results = pd.DataFrame(results)
+"""# Prepara i dati
+datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
+datasetTracesTest = data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
+dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
+dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
+X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(dataset_train_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
+X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
-# Visualizza i risultati
-print(df_results)
-
-# Puoi anche ordinare per validation accuracy o validation loss
-df_results_sorted = df_results.sort_values(by='val_loss')  # Ordina per la loss di validazione
-print(df_results_sorted.head())  # Visualizza i primi 5 risultati
+net = DeepConvLSTM()
+net.apply(init_weights.init_weights)
+val_loss = train.train(net, X_Train, Y_Train, X_Test, Y_Test, epochs=5, batch_size=84, lr=0.01)"""
+    

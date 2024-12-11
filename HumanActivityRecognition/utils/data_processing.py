@@ -94,21 +94,15 @@ def sliding_window(a,ws,ss = None,flatten = True):
 
 
 def iterate_minibatches(inputs, targets, batchsize, shuffle=True):
-
     assert len(inputs) == len(targets)
     if shuffle:
-        #crea un array di indici da 0 a len(input)-1 
         indices = np.arange(len(inputs))
-        #mescola gli indici in modo casuale per garantire che i dati vengono estratti in ordine causale
         np.random.shuffle(indices)
     for start_idx in range(0, len(inputs) - batchsize + 1, batchsize):
         if shuffle:
             excerpt = indices[start_idx:start_idx + batchsize]
         else:
             excerpt = slice(start_idx, start_idx + batchsize)
-            print(inputs.shape)  # Verifica le dimensioni dell'input
         yield inputs[excerpt], targets[excerpt]
-        #restituisce il minibatch corrente di dati di imput e target, uno alla volta
-        #inputs[excerpt] dim (batchsize, n_features), 
-        #targets[excerpt] dim (batchsize,)
+
 

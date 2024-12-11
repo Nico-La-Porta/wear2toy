@@ -9,7 +9,7 @@ from HumanActivityRecognition import plot
 train_on_gpu=check_gpu.check_gpu_availability()
 
 #(net=modello da allenare)
-def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=84, lr=0.01):
+def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=16, lr=0.01):
 
     #ottimizzatore stocastico del gradiente per aggiornare i pesi del modello, momentum aiuta a accelrare la discesa
     #del gradinete nella dimensione desiderata e ridurre le oscillazioni
@@ -31,7 +31,7 @@ def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=84, lr=0.
 
     #per ogni epoca il modello viene allenato su tutti i dati di train
     for e in range(epochs):
-        
+        h = net.init_hidden(batch_size)
         X_train, Y_train = shuffle(X_train, Y_train) # Shuffle dei dati all'inizio di ogni epoca
         # initialize hidden state: crea uno stato nascosto di dimensione (n_layer, batchsize,n_hidden)
         h = net.init_hidden(batch_size)
@@ -48,6 +48,7 @@ def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=84, lr=0.
 
             # Creating new variables for the hidden state, otherwise
             # we'd backprop through the entire training history
+
 
             h = tuple([each.data for each in h])
 
@@ -72,12 +73,14 @@ def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=84, lr=0.
             for batch in data_processing.iterate_minibatches(X_test, Y_test, batch_size):
                 x, y = batch
                 inputs, targets = torch.from_numpy(x), torch.from_numpy(y)
-                val_h = tuple([each.data for each in val_h])
 
+                val_h = tuple([each.data for each in val_h])
                 if train_on_gpu:
                     inputs, targets = inputs.cuda(), targets.cuda()
 
-                output, val_h = net(inputs, val_h, batch_size)
+
+
+                output, val_h = net(inputs, val_h,batch_size)
                 val_loss = criterion(output, targets.long())
                 val_losses.append(val_loss.item())
 
@@ -89,8 +92,8 @@ def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=84, lr=0.
 
         val_loss_history.append(np.mean(val_losses)) 
         val_accuracy_history.append(accuracy / (len(X_test) // batch_size))
-        net.train()  # reset to train mode after iterationg through validation data
-
+        
+        net.train()
         print(f"Epoch: {e+1}/{epochs}... "
               f"Train Loss: {np.mean(train_losses):.4f}... "
               f"Val Loss: {np.mean(val_losses):.4f}... "
@@ -99,3 +102,4 @@ def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=84, lr=0.
         
     plot.plot_learning_curves(train_loss_history, val_loss_history, val_accuracy_history)
 
+    return np.mean(val_losses)
