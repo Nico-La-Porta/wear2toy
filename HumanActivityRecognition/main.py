@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import optuna.visualization as vis
 from HumanActivityRecognition.app_config import RAW_DATA_DIR_TRAIN
 from HumanActivityRecognition.app_config import RAW_DATA_DIR_TEST
 
@@ -51,6 +52,7 @@ study = optuna.create_study(direction='minimize')
 study.optimize(objective, n_trials=100)
 
 print(study.best_params)
+vis.plot_optimization_history(study)
 
 
 """# Prepara i dati
