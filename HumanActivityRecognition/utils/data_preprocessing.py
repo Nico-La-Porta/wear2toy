@@ -1,8 +1,6 @@
 import os
 import numpy as np
 
-#from HumanActivityRecognition.app_config import PROCESSED_DATA_DIR_TRAIN
-
 #funzioni per:
     # 1)restituire una lista di file con una specifica estensione
     # 2)Caricare annotazioni e segnali da file .npz
@@ -80,10 +78,10 @@ def add_labels_to_dataset(dataset):
     return new_dataset_labeled
 
 
-def main():
-    """
-    Funzione principale per eseguire il processo.
-    """
+"""def main():
+    
+    #Funzione principale per eseguire il processo.
+    
     # Percorso della cartella contenente i file .npz
     path = PROCESSED_DATA_DIR_TRAIN
 
@@ -108,4 +106,4 @@ def main():
         print(f"First trace ID labeled: {first_trace['TraceID']}")
         print(f"Shape of first trace data labeled: {first_trace['TraceData'].shape}")
 if __name__ == "__main__":
-    main()
+    main()"""

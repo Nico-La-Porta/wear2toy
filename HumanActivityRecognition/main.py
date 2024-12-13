@@ -1,31 +1,35 @@
 import numpy as np
 import pandas as pd
 import optuna.visualization as vis
-from HumanActivityRecognition.app_config import RAW_DATA_DIR_TRAIN
-from HumanActivityRecognition.app_config import RAW_DATA_DIR_TEST
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from app_config import RAW_DATA_DIR_TRAIN
+from app_config import RAW_DATA_DIR_TEST
 
-from HumanActivityRecognition.utils import data_preprocessing
+from utils import data_preprocessing
 
-from HumanActivityRecognition.run_config import SLIDING_WINDOW_LENGTH
-from HumanActivityRecognition.run_config import NB_SENSOR_CHANNELS
-from HumanActivityRecognition.run_config import SLIDING_WINDOW_STEP
+from run_config import SLIDING_WINDOW_LENGTH
+from run_config import NB_SENSOR_CHANNELS
+from run_config import SLIDING_WINDOW_STEP
 
-from HumanActivityRecognition import sliding_window_on_data
-
+from utils import sliding_window_on_data
+from torch.utils.data import DataLoader
 from models.DeepConvLSTM import DeepConvLSTM
+from models.DeepConvLSTM import HARDataset
 
-from HumanActivityRecognition.utils import data_processing
+
 from HumanActivityRecognition import init_weights
 from HumanActivityRecognition import train
-from HumanActivityRecognition.utils import data_analysis
+
+from torch.utils.data import DataLoader, TensorDataset
 
 import optuna
-
+from torch.utils.data import DataLoader
 # Impostazione il seed per la riproducibilità
 init_weights.set_seed(42)
 
-# Crea il modello
-net = DeepConvLSTM()
+
 
     
 # Prepara i dati
@@ -36,8 +40,19 @@ dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest
 X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(dataset_train_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
+# Creazione dataset
+train_dataset = HARDataset(X_Train, Y_Train)
+test_dataset = HARDataset(X_Test, Y_Test)
+# Creazione DataLoader
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
+
+net=DeepConvLSTM()
+train.train(net, train_loader,test_loader,epochs=10, batch_size=16, lr=0.01 )
+
 # Funzione obiettivo per Optuna
-def objective(trial):
+
+"""def objective(trial):
     # vari iperparametri
 
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
@@ -52,7 +67,7 @@ study = optuna.create_study(direction='minimize')
 study.optimize(objective, n_trials=100)
 
 print(study.best_params)
-vis.plot_optimization_history(study)
+vis.plot_optimization_history(study)"""
 
 
 """# Prepara i dati

@@ -1,5 +1,12 @@
 import matplotlib.pyplot as plt
-from HumanActivityRecognition.app_config import FIGURES_DIR
+import sys
+import os
+"""per debug  permette al tuo script di trovare e importare moduli che si trovano nella directory principale 
+del progetto, anche se stai eseguendo lo script da una sottodirectory"""
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from app_config import FIGURES_DIR
+
 import os
 from datetime import datetime
 

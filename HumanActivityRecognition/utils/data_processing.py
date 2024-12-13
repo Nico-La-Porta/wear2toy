@@ -93,7 +93,7 @@ def sliding_window(a,ws,ss = None,flatten = True):
     return strided.reshape(dim)
 
 
-def iterate_minibatches(inputs, targets, batchsize, shuffle=True):
+"""def iterate_minibatches(inputs, targets, batchsize, shuffle=True):
     assert len(inputs) == len(targets)
     if shuffle:
         indices = np.arange(len(inputs))
@@ -103,6 +103,6 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=True):
             excerpt = indices[start_idx:start_idx + batchsize]
         else:
             excerpt = slice(start_idx, start_idx + batchsize)
-        yield inputs[excerpt], targets[excerpt]
+        yield inputs[excerpt], targets[excerpt]"""
 
 
