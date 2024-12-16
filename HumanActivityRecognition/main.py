@@ -1,11 +1,9 @@
-import numpy as np
-import pandas as pd
-import optuna.visualization as vis
-import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from app_config import RAW_DATA_DIR_TRAIN
-from app_config import RAW_DATA_DIR_TEST
+import sys
+import numpy as np
+from app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST
+
+sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 
 from utils import data_preprocessing
 
@@ -19,8 +17,8 @@ from models.DeepConvLSTM import DeepConvLSTM
 from models.DeepConvLSTM import HARDataset
 
 
-from HumanActivityRecognition import init_weights
-from HumanActivityRecognition import train
+from utils import init_weights
+import train
 
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -80,5 +78,15 @@ X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled
 
 net = DeepConvLSTM()
 net.apply(init_weights.init_weights)
-val_loss = train.train(net, X_Train, Y_Train, X_Test, Y_Test, epochs=5, batch_size=84, lr=0.01)"""
-    
+
+
+
+#train
+BATCH_SIZE = [8, 16, 32, 64, 128]
+LEARNING_RATE = np.logspace(-4, -1, 4) # Equivale a [0.0001, 0.001, 0.01, 0.1]
+
+if __name__ == "__main__":
+    for batch_size, lr in itertools.product(BATCH_SIZE, LEARNING_RATE):  # Li prendo da argparse o da run_config
+        print(f"Training with batch size {batch_size} and learning rate {lr}")
+        train.train(net, X_Train,Y_Train,X_Test,Y_Test,epochs=40,batch_size=batch_size, lr=lr)
+"""
