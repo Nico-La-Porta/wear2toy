@@ -17,8 +17,8 @@ from models.DeepConvLSTM import DeepConvLSTM
 from models.DeepConvLSTM import HARDataset
 
 
-from utils import init_weights
-import train
+from HumanActivityRecognition.utils import init_weights
+from HumanActivityRecognition import train
 
 from torch.utils.data import DataLoader, TensorDataset
 
