@@ -31,7 +31,7 @@ def train(net, train_loader, test_loader,epochs=10,batch_size=16,lr=0.01):
 
     #per ogni epoca il modello viene allenato su tutti i dati di train
     for e in range(epochs):
-        h = net.init_hidden(batch_size)
+        
         train_losses = []
         net.train()  # Imposta la rete in modalità allenamento
         
@@ -40,10 +40,10 @@ def train(net, train_loader, test_loader,epochs=10,batch_size=16,lr=0.01):
             print("Input batch size:", inputs.size(0))
             if train_on_gpu:
                 inputs, targets = inputs.cuda(), targets.cuda()
-
-            h = tuple([each.data for each in h])            
-
             
+            h = net.init_hidden(batch_size)
+            # h = tuple([each.data for each in h])            
+
             # zero accumulated gradients
             opt.zero_grad()
 
