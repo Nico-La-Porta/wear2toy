@@ -9,7 +9,7 @@ from utils import plot
 train_on_gpu=check_gpu.check_gpu_availability()
 
 #(net=modello da allenare)
-def train(net, train_loader, test_loader,epochs=10,batch_size=16,lr=0.01):
+def train(net, train_loader, test_loader,epochs=10,batch_size=16,lr=0.01, patience=5):
 
     #ottimizzatore stocastico del gradiente per aggiornare i pesi del modello, momentum aiuta a accelrare la discesa
     #del gradinete nella dimensione desiderata e ridurre le oscillazioni
@@ -29,6 +29,9 @@ def train(net, train_loader, test_loader,epochs=10,batch_size=16,lr=0.01):
     val_loss_history = [] 
     val_accuracy_history = []
 
+    best_val_loss = float('inf')
+    patience_counter = 0
+
     #per ogni epoca il modello viene allenato su tutti i dati di train
     for e in range(epochs):
         
@@ -37,7 +40,7 @@ def train(net, train_loader, test_loader,epochs=10,batch_size=16,lr=0.01):
         
         #Ciclo sui minibatch del DataLoader di training
         for inputs, targets in train_loader: 
-            print("Input batch size:", inputs.size(0))
+            #print("Input batch size:", inputs.size(0))
             if train_on_gpu:
                 inputs, targets = inputs.cuda(), targets.cuda()
             
@@ -93,6 +96,18 @@ def train(net, train_loader, test_loader,epochs=10,batch_size=16,lr=0.01):
               f"Val Acc: {accuracy / len(test_loader):.4f}... "
               f"F1-Score: {f1score / len(test_loader):.4f}")
         
+
+
+        # Early stopping
+        if np.mean(val_losses) < best_val_loss:
+            best_val_loss = np.mean(val_losses)
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
+        if patience_counter >= patience:
+            print("Early stopping triggered")
+            break
     plot.plot_learning_curves(train_loss_history, val_loss_history, val_accuracy_history)
 
     return np.mean(val_losses)

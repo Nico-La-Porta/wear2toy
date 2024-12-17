@@ -71,42 +71,42 @@ class DeepConvLSTM(nn.Module):
 
     def forward(self, x, hidden, batch_size):
 
-        print(f"Input iniziale al modello: {x.shape}")
+        #print(f"Input iniziale al modello: {x.shape}")
         #-1 sta calcolando automaticamente la dimensione rimanente (batchsize),
         x = x.reshape(-1, NB_SENSOR_CHANNELS, SLIDING_WINDOW_LENGTH)
-        print(f"Dopo reshape per convoluzione: {x.shape}")
+        #print(f"Dopo reshape per convoluzione: {x.shape}")
         x = F.relu(self.conv1(x))
-        print(f"Dopo conv1: {x.shape}")
+        #print(f"Dopo conv1: {x.shape}")
         x = F.relu(self.conv2(x))
-        print(f"Dopo conv2: {x.shape}")
+        #print(f"Dopo conv2: {x.shape}")
         x = F.relu(self.conv3(x))
-        print(f"Dopo conv3: {x.shape}")
+        #print(f"Dopo conv3: {x.shape}")
         x = F.relu(self.conv4(x))
-        print(f"Dopo conv4: {x.shape}")
+        #print(f"Dopo conv4: {x.shape}")
         #x = x.reshape(5, -1, self.n_filters)
         # Per evitare problemi con la dimensione
         x = x.transpose(1, 2)
         
-        print(f"Dopo reshape per LSTM: {x.shape}")
-        print(f"La forma del tensore dopo il view è: {x.shape}")
+        #print(f"Dopo reshape per LSTM: {x.shape}")
+        #print(f"La forma del tensore dopo il view è: {x.shape}")
   
         #si passa x attraverso due livelli LSTM uno dopo l'altro 
         x, hidden = self.lstm1(x, hidden)
-        print(f"Dopo LSTM1: {x.shape}")
+        #print(f"Dopo LSTM1: {x.shape}")
         x, hidden = self.lstm2(x, hidden)
-        print(f"Dopo LSTM2: {x.shape}")
+        #print(f"Dopo LSTM2: {x.shape}")
         
         
 
         #riorganizza x in un vettore 2D (bacthsize*sequence lenght, n_hidden) per adattarsi al layer fully connected
         x = x.contiguous().view(-1, self.n_hidden)
-        print(f"Dopo view per fully connected: {x.shape}")
+        #print(f"Dopo view per fully connected: {x.shape}")
         x = self.dropout(x)
-        print(f"Dopo dropout: {x.shape}")
+        #print(f"Dopo dropout: {x.shape}")
         
         #passa l'output attraverso il layer fully connected, mappando x a dimensioni [batchsize*sequence_lenght, n_classes]
         x = self.fc(x)
-        print(f"Dopo fully connected: {x.shape}")
+        #print(f"Dopo fully connected: {x.shape}")
         
         #ridimensiona l'output per ottenere [batchsize, lunghezzasequenza, n_classes] e mantiene solo l'ultimo step temporale (-1,:)
         out = x.reshape(batch_size, -1, self.n_classes)[:,-1,:]

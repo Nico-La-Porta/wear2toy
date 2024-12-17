@@ -24,6 +24,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 import optuna
 from torch.utils.data import DataLoader
+import optuna.visualization as vis
 # Impostazione il seed per la riproducibilità
 init_weights.set_seed(42)
 
@@ -42,21 +43,28 @@ X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled
 train_dataset = HARDataset(X_Train, Y_Train)
 test_dataset = HARDataset(X_Test, Y_Test)
 # Creazione DataLoader
-train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
+#train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, drop_last=True)
+#test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, drop_last=True)
 
-net=DeepConvLSTM()
-train.train(net, train_loader,test_loader,epochs=10, batch_size=16, lr=0.01 )
+#net=DeepConvLSTM()
+#train.train(net, train_loader,test_loader,epochs=20, batch_size=32, lr=0.01 )
 
 # Funzione obiettivo per Optuna
 
-"""def objective(trial):
-    # vari iperparametri
-
+def objective(trial):
+    # Definisci gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    
+    batch_size = trial.suggest_categorical('batch_size', [16, 32, 64, 128])
+
+    # Crea i DataLoader con il batch_size suggerito
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+
+    # Crea il modello con gli iperparametri suggeriti
+    net = DeepConvLSTM()
+
     # Esegui l'allenamento
-    val_loss = train.train(net, X_Train, Y_Train, X_Test, Y_Test, epochs=5, batch_size=84, lr=lr)
+    val_loss = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
     
     return val_loss
 
@@ -64,8 +72,12 @@ train.train(net, train_loader,test_loader,epochs=10, batch_size=16, lr=0.01 )
 study = optuna.create_study(direction='minimize')
 study.optimize(objective, n_trials=100)
 
-print(study.best_params)
-vis.plot_optimization_history(study)"""
+print("Best hyperparameters: ", study.best_params)
+print("Lowest loss: ", study.best_value)
+
+#visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come la loss
+# è cambiata nel corso delle diverse prove (trials) durante l'ottimizzazione.
+vis.plot_optimization_history(study)
 
 
 """# Prepara i dati
