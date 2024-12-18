@@ -15,6 +15,7 @@ import sliding_window_on_data
 from torch.utils.data import DataLoader
 from models.DeepConvLSTM import DeepConvLSTM
 from models.DeepConvLSTM import HARDataset
+from models.DeepConvLSTM import collate_fn,create_weighted_sampler
 
 
 from utils import init_weights
@@ -42,6 +43,9 @@ X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled
 # Creazione dataset
 train_dataset = HARDataset(X_Train, Y_Train)
 test_dataset = HARDataset(X_Test, Y_Test)
+
+# Creazione sampler pesato per il dataset di training
+train_sampler = create_weighted_sampler(Y_Train)
 # Creazione DataLoader
 #train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, drop_last=True)
 #test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, drop_last=True)
@@ -57,7 +61,7 @@ def objective(trial):
     batch_size = trial.suggest_categorical('batch_size', [16, 32, 64, 128])
 
     # Crea i DataLoader con il batch_size suggerito
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True,sampler=train_sampler, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
     # Crea il modello con gli iperparametri suggeriti

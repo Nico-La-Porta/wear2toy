@@ -11,6 +11,7 @@ from run_config import NB_SENSOR_CHANNELS
 from run_config import SLIDING_WINDOW_STEP
 import sliding_window_on_data
 from app_config import FIGURES_DIR
+import json
 
 
 # Funzione per calcolare e rappresentare la distribuzione delle etichette
@@ -34,7 +35,7 @@ def plot_label_distribution(dataset,dataset_type="train",save_dir="figures"):
     # Mostra tutti i valori unici sull'asse x
     plt.xticks(ticks=unique_labels, labels=unique_labels, rotation=45)
     plt.tight_layout()
-    plt.show()
+    #plt.show()
 
         # Salva il grafico nella cartella specificata
     if not os.path.exists(save_dir):
@@ -52,14 +53,14 @@ def plot_label_distribution(dataset,dataset_type="train",save_dir="figures"):
 
    #Visualizza la distribuzione delle finestre in base alle etichette.
 def plot_window_distribution(X, Y,dataset_type="train",save_dir="figures"):
-
+    num_windows = len(Y)
     # Controllo delle dimensioni
-    print(f"Numero totale di finestre: {len(Y)}")
+    print(f"Numero totale di finestre: {num_windows}")
     print(f"Forma delle finestre (X): {X.shape}")
     print(f"Numero di etichette uniche: {len(np.unique(Y))}")
 
     # Ottieni tutte le etichette uniche
-    unique_labels = np.unique(Y)
+    unique_labels,counts = np.unique(Y,return_counts=True)
 
     # Creazione del grafico
     plt.figure(figsize=(12, 6))
@@ -71,7 +72,7 @@ def plot_window_distribution(X, Y,dataset_type="train",save_dir="figures"):
     # Mostra tutte le etichette sull'asse x
     plt.xticks(ticks=unique_labels, labels=unique_labels, rotation=45)
     plt.tight_layout()
-    plt.show()
+    #plt.show()
 
         # Salva il grafico nella cartella specificata
     if not os.path.exists(save_dir):
@@ -85,6 +86,22 @@ def plot_window_distribution(X, Y,dataset_type="train",save_dir="figures"):
     plt.close()  # Chiude la figura per liberare la memoria
 
     print(f"Grafico salvato in: {file_path}")
+
+        # Salva il numero di finestre in un file JSON
+    # Salva il numero di finestre in un file JSON
+    json_data = {
+        "dataset_type": dataset_type,
+        "num_windows": num_windows,
+        "windows_per_activity": dict(zip(unique_labels.tolist(),counts.tolist()))
+    }
+    
+    json_file_name = f"window_distribution_{dataset_type}_{timestamp}.json"
+    json_file_path = os.path.join(save_dir, json_file_name)
+    
+    with open(json_file_path, 'w') as json_file:
+        json.dump(json_data, json_file,indent=4)
+
+    print(f"Informazioni salvate in: {json_file_path}")
 
 
 if __name__ == "__main__":
