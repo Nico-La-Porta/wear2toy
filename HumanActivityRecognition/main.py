@@ -61,6 +61,7 @@ def objective(trial):
     batch_size = trial.suggest_categorical('batch_size', [16, 32, 64, 128])
 
     # Crea i DataLoader con il batch_size suggerito
+    #runno di nuovo il train con 5 secondi di finestra 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True,sampler=train_sampler, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
@@ -83,7 +84,7 @@ print("Lowest loss: ", study.best_value)
 # è cambiata nel corso delle diverse prove (trials) durante l'ottimizzazione.
 vis.plot_optimization_history(study)
 
-
+#salvi i parametri prendo il train e lo ritraini con iperparametri migliori
 """# Prepara i dati
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
 datasetTracesTest = data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
@@ -106,3 +107,10 @@ if __name__ == "__main__":
         print(f"Training with batch size {batch_size} and learning rate {lr}")
         train.train(net, X_Train,Y_Train,X_Test,Y_Test,epochs=40,batch_size=batch_size, lr=lr)
 """
+
+#calcolo metriche (confronto le y vere con con il predetto )
+
+
+#pytorch cross validation
+
+
