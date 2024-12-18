@@ -1,6 +1,9 @@
 import numpy as np
-
-from HumanActivityRecognition.utils import data_processing
+import os
+import sys
+from app_config import PROJ_ROOT
+sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
+from utils import data_processing
 
 # Funzione per applicare la sliding window sui dati di train
 #prende in ingresso la lista di dizionari con TraceId e TraceData, la lunghezza della finestra, l'overlap (passo della finestra), e il numero di canali (feature)

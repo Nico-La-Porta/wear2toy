@@ -11,7 +11,7 @@ from run_config import SLIDING_WINDOW_LENGTH
 from run_config import NB_SENSOR_CHANNELS
 from run_config import SLIDING_WINDOW_STEP
 
-from utils import sliding_window_on_data
+import sliding_window_on_data
 from torch.utils.data import DataLoader
 from models.DeepConvLSTM import DeepConvLSTM
 from models.DeepConvLSTM import HARDataset
