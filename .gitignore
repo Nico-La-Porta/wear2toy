@@ -171,3 +171,7 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 data
+reports/figures/*
+confusion_matrices/*
+HumanActivityRecognition/cm_all classes/*
+HumanActivityRecognition/cm_repl_without_0_15_16/*
