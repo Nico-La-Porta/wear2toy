@@ -37,8 +37,7 @@ train_on_gpu=check_gpu.check_gpu_availability()
 def collate_fn(batch):
     X_batch, Y_batch = zip(*batch) #utilizziamo zip per separare i dati dalle etichette all'interno del batch
     #scompone il batch in due tupple (una contentente tutti gli elementi di x e l'altra gli el di y)
-    X_batch = torch.stack([torch.tensor(x) for x in X_batch]) #converte ogni elemento di x_batch in un tensore e poi li impila lungo una nuova dimensione per creare un unico tensore 3d
-    Y_batch = torch.tensor(Y_batch) #tensore 1d contenete tutte le etichette
+    X_batch = torch.stack([x.clone().detach() for x in X_batch]) #converte ogni elemento di x_batch in un tensore e poi li impila lungo una nuova dimensione per creare un unico tensore 3d
     return X_batch, Y_batch
 
 
