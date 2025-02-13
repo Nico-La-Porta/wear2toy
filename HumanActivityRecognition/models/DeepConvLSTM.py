@@ -38,6 +38,7 @@ def collate_fn(batch):
     X_batch, Y_batch = zip(*batch) #utilizziamo zip per separare i dati dalle etichette all'interno del batch
     #scompone il batch in due tupple (una contentente tutti gli elementi di x e l'altra gli el di y)
     X_batch = torch.stack([x.clone().detach() for x in X_batch]) #converte ogni elemento di x_batch in un tensore e poi li impila lungo una nuova dimensione per creare un unico tensore 3d
+    Y_batch = torch.tensor(Y_batch, dtype=torch.long) #converte y_batch in un tensore
     return X_batch, Y_batch
 
 
@@ -47,7 +48,7 @@ def create_weighted_sampler(Y):
     unique_labels, counts = np.unique(Y, return_counts=True)
     weights = 1.0 / counts #calcola pesi inversamente proporzionali al numero di occorrenze delle etichette
     sample_weights = np.array([weights[label] for label in Y]) #arrai dove ogni elemento è il peso corrispondente all'etichetta in y 
-    sampler = WeightedRandomSampler(sample_weights, len(sample_weights)) #seleziona i campioni in modo causale ma con una probabilità proporzionale ai pesi specificati
+    sampler = WeightedRandomSampler(sample_weights, len(sample_weights),replacement=True) #seleziona i campioni in modo causale ma con una probabilità proporzionale ai pesi specificati
     return sampler #ritorna sampler che può essere utilizzato nel dataloder per bilanciare il dataset durante l'addestramento
 
 class DeepConvLSTM(nn.Module):

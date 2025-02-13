@@ -25,7 +25,7 @@ class EarlyStopper:
                 return True
         return False
 
-def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, patience=5):
+def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, patience=7):
 
     opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
     criterion = nn.CrossEntropyLoss()
@@ -40,6 +40,7 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
 
     best_f1score = 0
     patience_counter = 0
+    early_stopper = EarlyStopper(patience=patience, min_delta=0.0001)
 
     for e in range(epochs):
         
@@ -50,6 +51,7 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
             if train_on_gpu:
                 inputs, targets = inputs.cuda(), targets.cuda()
             
+
             h = net.init_hidden(batch_size)
             opt.zero_grad()
             output, h = net(inputs, h, batch_size)
@@ -92,16 +94,14 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
               f"Val Loss: {np.mean(val_losses):.4f}... "
               f"Val Acc: {accuracy / len(test_loader):.4f}... "
               f"F1-Score: {f1score / len(test_loader):.4f}")
+        
+        # Aggiorna il miglior F1-score
+        current_f1score = f1score / len(test_loader)
+        if current_f1score > best_f1score:
+            best_f1score = current_f1score
 
-        if f1score / len(test_loader) > best_f1score:
-            best_f1score = f1score / len(test_loader)
-            patience_counter = 0
-        else:
-            patience_counter += 1
-
-        if patience_counter >= patience:
+        if early_stopper.early_stop(np.mean(val_losses)):
             print("Early stopping triggered")
             break
-
-
+        
     return best_f1score
