@@ -12,25 +12,17 @@ from run_config import NB_SENSOR_CHANNELS
 from run_config import SLIDING_WINDOW_STEP
 
 import sliding_window_on_data
-from torch.utils.data import DataLoader
-from models.DeepConvLSTM import DeepConvLSTM
-from models.DeepConvLSTM import HARDataset
-from models.DeepConvLSTM import collate_fn,create_weighted_sampler
+from torch.utils.data import DataLoader, TensorDataset
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn,create_weighted_sampler
 
 
 from utils import init_weights
 import train
 
-from torch.utils.data import DataLoader, TensorDataset
-
 import optuna
-from torch.utils.data import DataLoader
 import optuna.visualization as vis
 # Impostazione il seed per la riproducibilità
 init_weights.set_seed(42)
-
-
-
     
 # Prepara i dati
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
@@ -38,6 +30,7 @@ datasetTracesTest = data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
 dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
 dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
 X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(dataset_train_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
+np.save('data\X_Train.npy', X_Train)
 X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
 # Creazione dataset
