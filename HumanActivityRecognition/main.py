@@ -6,6 +6,7 @@ from app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 
 from utils import data_preprocessing
+from utils.log_config import logger
 
 from run_config import SLIDING_WINDOW_LENGTH
 from run_config import NB_SENSOR_CHANNELS
@@ -38,6 +39,7 @@ datasetTracesTest = data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
 dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
 dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
 X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(dataset_train_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
+np.save('data\X_Train.npy', X_Train)
 X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
 # Creazione dataset
