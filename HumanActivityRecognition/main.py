@@ -13,25 +13,17 @@ from run_config import NB_SENSOR_CHANNELS
 from run_config import SLIDING_WINDOW_STEP
 
 import sliding_window_on_data
-from torch.utils.data import DataLoader
-from models.DeepConvLSTM import DeepConvLSTM
-from models.DeepConvLSTM import HARDataset
-from models.DeepConvLSTM import collate_fn,create_weighted_sampler
+from torch.utils.data import DataLoader, TensorDataset
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn,create_weighted_sampler
 
 
 from utils import init_weights
 import train
 
-from torch.utils.data import DataLoader, TensorDataset
-
 import optuna
-from torch.utils.data import DataLoader
 import optuna.visualization as vis
 # Impostazione il seed per la riproducibilità
 init_weights.set_seed(42)
-
-
-
     
 # Prepara i dati
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
