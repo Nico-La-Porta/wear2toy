@@ -6,6 +6,7 @@ from app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 
 from utils import data_preprocessing
+from utils.log_config import logger
 
 from run_config import SLIDING_WINDOW_LENGTH
 from run_config import NB_SENSOR_CHANNELS
