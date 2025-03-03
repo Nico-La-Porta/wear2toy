@@ -16,7 +16,8 @@ def train(net, X_train, Y_train, X_test, Y_test, epochs=10, batch_size=16, lr=0.
     #wight_decay: regolarizzazione L2 per prevenire overfitting
     
     
-    opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    #opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    opt=torch.optim.SGD(filter(lambda p: p.requires_grad,net.parameters()), lr=lr, momentum=0.9, weight_decay=1e-4)
     #opt = torch.optim.RMSprop(net.parameters(), lr=lr, alpha=0.99, weight_decay=1e-4, momentum=0.9)
     #opt = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-4)
     criterion = nn.CrossEntropyLoss()

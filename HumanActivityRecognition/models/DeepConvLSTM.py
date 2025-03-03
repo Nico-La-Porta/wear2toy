@@ -149,3 +149,6 @@ class DeepConvLSTM(nn.Module):
         
         return hidden
         #restituisce una tupla contenente lo stato nascosto e lo stato della cella
+    
+    def set_n_classes(self, n_classes):
+        self.n_classes = n_classes 

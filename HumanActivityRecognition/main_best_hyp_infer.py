@@ -239,61 +239,44 @@ train_sampler = create_weighted_sampler(Y_train_mapped)
 
 
 
-def objective(trial):
-    # Definisci gli iperparametri da ottimizzare
-    lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    batch_size = trial.suggest_categorical('batch_size', [4, 8, 12])
+
 
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,shuffle=True, drop_last=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+train_loader = DataLoader(train_dataset, batch_size=8,shuffle=True, drop_last=True)
+test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False, drop_last=True)
 
     # Crea il modello con gli iperparametri suggeriti# Carica il modello preaddestratocd
-    model = DeepConvLSTM()
+model = DeepConvLSTM()
 
         # Rimuovi la testa originale, in modo da non caricare i pesi associati
-    model.load_state_dict(torch.load('best_model_dl.pth'), strict=False)
+model.load_state_dict(torch.load('best_model_dl.pth'), strict=False)
 
     # Ora sostituisci la testa del modello con la nuova dimensione di classi (4)
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, 4)  # 4 classi
-    model.set_n_classes(4)
+num_ftrs = model.fc.in_features
+model.fc = nn.Linear(num_ftrs, 4)  # 4 classi
+model.set_n_classes(4)
 
     # Congela tutti i parametri tranne quelli della testa (fully connected)
-    for param in model.parameters():
+for param in model.parameters():
         param.requires_grad = False  # Congela tutti i pesi
 
     # Sblocca i parametri della testa (fully connected)
-    for param in model.fc.parameters():
-        param.requires_grad = True  # Solo i pesi della testa saranno addestrabili
+for param in model.fc.parameters():
+    param.requires_grad = True  # Solo i pesi della testa saranno addestrabili
 
-    # Esegui l'allenamento
-    best_f1_score = train_toys.train(model, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
+for name, param in model.named_parameters():
+    print(f"{name} requires_grad={param.requires_grad}")
 
-    return best_f1_score
+file_path = os.path.join(REPORTS_DIR, 'best_hyperparameters_ball.csv')
+loaded_params_df = pd.read_csv(file_path)
+loaded_params = loaded_params_df.iloc[0].to_dict()  # Convertola prima riga in un dizionario
 
-# Creazione studio Optuna ottimizza, nel senso di minimizzare la loss in 100 prove
-study = optuna.create_study(direction='maximize')
-study.optimize(objective, n_trials=100)
+# Estrai i valori
+lr = loaded_params["lr"]
+bs = int(loaded_params["batch_size"])  # Assicurati che sia un intero
 
-print("Best hyperparameters: ", study.best_params)
-print("Highest F1-score: ", study.best_value)
-
-
-#salvo i best hyperparameters
-best_hyperparameters = study.best_params
-best_hyperparameters['best_f1_score'] = study.best_value
-best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball.csv'), index=False)
-
-
-
-
-#visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come la loss
-# è cambiata nel corso delle diverse prove (trials) durante l'ottimizzazione.
-vis.plot_optimization_history(study)
-
-
-
+print(loaded_params)
+best_f1_score = train_toys.train(model, train_loader, test_loader, epochs=100, batch_size= bs, lr=lr)
+print(f"Best F1 score: {best_f1_score}")
 

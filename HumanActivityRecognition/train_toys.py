@@ -26,7 +26,8 @@ class EarlyStopper:
 
 def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, patience=7):
 
-    opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    #opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    opt = torch.optim.SGD(filter(lambda p: p.requires_grad,net.parameters()), lr=lr, momentum=0.9, weight_decay=1e-4)
     criterion = nn.CrossEntropyLoss()
 
     if train_on_gpu:
