@@ -2,6 +2,8 @@ import os
 import sys
 import numpy as np
 import torch
+
+
 from app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 import pandas as pd
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
@@ -16,17 +18,18 @@ from run_config import SLIDING_WINDOW_STEP
 
 import sliding_window_on_data
 from torch.utils.data import DataLoader
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn, create_weighted_sampler
 
 
 from utils import init_weights
 import train
-import train_with_cm
 
 import optuna
 import optuna.visualization as vis
-from optuna.pruners import MedianPruner
 import matplotlib.pyplot as plt
+from optuna.pruners import MedianPruner
+
+import train_with_cm
 
 # Impostazione il seed per la riproducibilità
 init_weights.set_seed(42)
@@ -43,6 +46,8 @@ X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled
 train_dataset = HARDataset(X_Train, Y_Train)
 test_dataset = HARDataset(X_Test, Y_Test)
 
+# Creazione sampler pesato per il dataset di training
+train_sampler = create_weighted_sampler(Y_Train)
 
 
 # Funzione obiettivo per Optuna
@@ -53,8 +58,8 @@ def objective(trial):
     batch_size = trial.suggest_categorical('batch_size', [16, 32, 64, 128])
 
     # Crea i DataLoader con il batch_size suggerito
-    #runno di nuovo il train con 5 secondi di finestra 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True, sampler=train_sampler, collate_fn=collate_fn)
+
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
 
@@ -82,11 +87,11 @@ print("Highest F1-score: ", study.best_value)
 best_hyperparameters = study.best_params
 best_hyperparameters['best_f1_score'] = study.best_value
 best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_without_sampler.csv'), index=False)
+best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_sampler.csv'), index=False)
 
 #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
 # è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
-file_name = "optimization_history_dl_without_sampler.png"
+file_name = "optimization_history_dl_with_sampler.png"
 fig=vis.plot_optimization_history(study)
 plt.show()
 
@@ -101,17 +106,17 @@ best_lr = study.best_params['lr']
 best_batch_size = study.best_params['batch_size']
 
 # Crea i DataLoader con i migliori iperparametri
-train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=True, shuffle=True)
+train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=True, sampler=train_sampler, collate_fn=collate_fn)
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
 
 # Crea il modello con i migliori iperparametri
 best_net = DeepConvLSTM()
 
 # Esegui l'allenamento con i migliori iperparametri
-best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_without_sampler")
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_with_sampler")
 
 # Salva il miglior modello
-model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_without_sampler.pth')
+model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_with_sampler.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
 print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")

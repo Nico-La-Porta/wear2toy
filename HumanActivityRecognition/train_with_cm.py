@@ -1,12 +1,11 @@
-import torch
-import torch.nn as nn
-import numpy as np
-from sklearn import metrics
-from sklearn.utils import shuffle
-from utils import check_gpu 
-from utils import plot
-from app_config import MODELS_DIR
 import os
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, f1_score
+import seaborn as sns
+from app_config import MODELS_DIR, FIGURES_DIR
+from utils import check_gpu
 
 train_on_gpu=check_gpu.check_gpu_availability()
 
@@ -46,8 +45,10 @@ class EarlyStopper:
                 return True  # Fermati
         return False
 
+def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, patience=7, figure_name="figure"):
 
-def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, patience=7):
+    os.makedirs(FIGURES_DIR, exist_ok=True)  # Assicura che la cartella per le figure esista
+
 
 
     opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
@@ -67,11 +68,11 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
     for e in range(epochs):
         train_losses = []
         net.train()
-        
+
         for inputs, targets in train_loader: 
             if train_on_gpu:
                 inputs, targets = inputs.cuda(), targets.cuda()
-            
+
             h = net.init_hidden(batch_size)
             opt.zero_grad()
             output, h = net(inputs, h, batch_size)
@@ -95,7 +96,7 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
 
                 if train_on_gpu:
                     inputs, targets = inputs.cuda(), targets.cuda()
-                
+
                 output, val_h = net(inputs, val_h, batch_size)
                 val_loss = criterion(output, targets.long())
                 val_losses.append(val_loss.item())
@@ -103,9 +104,9 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
                 top_p, top_class = output.topk(1, dim=1)
                 equals = top_class == targets.view(*top_class.shape).long()
                 accuracy += torch.mean(equals.type(torch.FloatTensor))
-                f1score += metrics.f1_score(top_class.cpu(), targets.view(*top_class.shape).long().cpu(), average='weighted')
-        
-        val_loss_history.append(np.mean(val_losses)) 
+                f1score += f1_score(top_class.cpu(), targets.view(*top_class.shape).long().cpu(), average='weighted')
+
+        val_loss_history.append(np.mean(val_losses))
         val_accuracy_history.append(accuracy / len(test_loader))
         val_f1score_history.append(f1score / len(test_loader))
 
@@ -115,15 +116,50 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
               f"Val Acc: {accuracy / len(test_loader):.4f}... "
               f"F1-Score: {f1score / len(test_loader):.4f}")
         
-        # Aggiorna il miglior F1-score
+        # Aggiorna il miglior F1-score e salva il modello con il nome univoco
         current_f1score = f1score / len(test_loader)
 
         if current_f1score > best_f1score:
             best_f1score = current_f1score
 
-        # Early stopping basato sull'F1-score
+
+        # Early stopping
         if early_stopper.early_stop(current_f1score):
+            print("Early stopping triggered.")
             net.eval()
             break
-        
+
+
+    # Confusion Matrix
+    all_preds = []
+    all_labels = []
+    with torch.no_grad():
+        for inputs, targets in test_loader:
+            if train_on_gpu:
+                inputs, targets = inputs.cuda(), targets.cuda()
+
+            output, _ = net(inputs, None, batch_size)
+            _, predicted = torch.max(output, 1)
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(targets.cpu().numpy())
+
+    cm = confusion_matrix(all_labels, all_preds)
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=test_loader.dataset.classes, yticklabels=test_loader.dataset.classes)
+    plt.title("Confusion Matrix")
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_confusion_matrix.png"))
+    plt.close()  # Chiude la figura
+
+    # Curva di validazione F1-score
+    plt.figure(figsize=(10, 6))
+    plt.plot(val_f1score_history, label="F1-Score", color="green")
+    plt.xlabel("Epochs")
+    plt.ylabel("F1-Score")
+    plt.title("Validation F1-Score")
+    plt.legend()
+    plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_f1score_curve.png"))
+    plt.close()  # Chiude la figura
+
     return best_f1score
