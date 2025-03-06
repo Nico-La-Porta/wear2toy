@@ -15,7 +15,7 @@ import torch
 from torch.utils.data import Dataset
 
 class HARDataset(Dataset):
-    def __init__(self, data, labels):
+    def __init__(self, data, labels, class_names=None):
         """
         Args:
             data (numpy.ndarray): Input data, forma (n_samples, n_features, seq_length).
@@ -23,6 +23,7 @@ class HARDataset(Dataset):
         """
         self.data = torch.tensor(data, dtype=torch.float32)
         self.labels = torch.tensor(labels, dtype=torch.long)
+        self.classes = class_names if class_names is not None else [str(i) for i in range(len(set(labels)))]
 
     def __len__(self):
         return len(self.labels)
