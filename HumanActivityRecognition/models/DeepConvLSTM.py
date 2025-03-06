@@ -15,7 +15,7 @@ import torch
 from torch.utils.data import Dataset
 
 class HARDataset(Dataset):
-    def __init__(self, data, labels):
+    def __init__(self, data, labels, class_names=None):
         """
         Args:
             data (numpy.ndarray): Input data, forma (n_samples, n_features, seq_length).
@@ -23,6 +23,7 @@ class HARDataset(Dataset):
         """
         self.data = torch.tensor(data, dtype=torch.float32)
         self.labels = torch.tensor(labels, dtype=torch.long)
+        self.classes=class_names if class_names is not None else [str(i) for i in range(len(np.unique(labels)))]
 
     def __len__(self):
         return len(self.labels)
@@ -62,7 +63,7 @@ class DeepConvLSTM(nn.Module):
     
     #INPUT= un tensoore di dimensioni [batchsize, NB_SENSOR_CHANNELS.sequence_lenght]
     def __init__(self, n_hidden=128, n_layers=1, n_filters=64, 
-                 n_classes=29, filter_size=5, drop_prob=0.5):
+                 n_classes=29, filter_size=5, drop_prob=0.5,nb_sensor_channels=9, sliding_window_length=100):
         super(DeepConvLSTM, self).__init__() #inizializza iperparametri del modello
         self.drop_prob = drop_prob
         self.n_layers = n_layers
@@ -70,10 +71,12 @@ class DeepConvLSTM(nn.Module):
         self.n_filters = n_filters
         self.n_classes = n_classes
         self.filter_size = filter_size
+        self.nb_sensor_channels = nb_sensor_channels
+        self.sliding_window_length = sliding_window_length
              
         #PRENDE IN INGRESSO il numrro di canali, applica n filtri di dimensione filtersize
         #L'OUTPUT sarà (batcsize, nfilters, output_lenght)
-        self.conv1 = nn.Conv1d(NB_SENSOR_CHANNELS, n_filters, filter_size)
+        self.conv1 = nn.Conv1d(self.nb_sensor_channels, n_filters, filter_size)
         self.conv2 = nn.Conv1d(n_filters, n_filters, filter_size)
         self.conv3 = nn.Conv1d(n_filters, n_filters, filter_size)
         self.conv4 = nn.Conv1d(n_filters, n_filters, filter_size)
@@ -93,7 +96,7 @@ class DeepConvLSTM(nn.Module):
 
         #print(f"Input iniziale al modello: {x.shape}")
         #-1 sta calcolando automaticamente la dimensione rimanente (batchsize),
-        x = x.reshape(-1, NB_SENSOR_CHANNELS, SLIDING_WINDOW_LENGTH)
+        x = x.reshape(-1, self.nb_sensor_channels, self.sliding_window_length)
         #print(f"Dopo reshape per convoluzione: {x.shape}")
         x = F.relu(self.conv1(x))
         #print(f"Dopo conv1: {x.shape}")

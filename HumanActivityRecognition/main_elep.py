@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
+import glob
 from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 import sliding_window_on_data
 from torch.utils.data import DataLoader
@@ -8,9 +9,9 @@ from torch.utils.data import DataLoader
 from models.DeepConvLSTM import DeepConvLSTM, HARDataset 
 import optuna
 import optuna.visualization as vis
-import train_toys
+import train
 import torch
-import train_toys_with_cm
+import train_with_cm
 import matplotlib.pyplot as plt
 #definisco il path da cui leggere i .csv
 
@@ -27,53 +28,85 @@ print(path)
 # Definisco il percorso della cartella contenente i CSV
 
 
+
 # Nome del file CSV finale
-final_csv_path = os.path.join(path, 'df_DO_non_null.csv')
+final_csv_path = os.path.join(path, 'df_ELEP_non_null.csv')
 
 # Controllo se il file esiste già
 if os.path.exists(final_csv_path):
     print(f"Il file {final_csv_path} esiste già. Lo sto caricando...")
-    df_doll = pd.read_csv(final_csv_path)
+    df_elep = pd.read_csv(final_csv_path)
+
 else:
+    suffixes = ["BE", "GE", "RE", "YE", "WE"]
+    matching_files=[]
+    for suffix in suffixes:
+        matching_files.extend(glob.glob(os.path.join(path, f"*_{suffix}*.csv")))
+        print(matching_files)
 
-    df_list_doll = [] #lista vuota per appendere i dataframe con attività non nulla
-    for file in os.listdir(path):
-        if file.endswith('.csv'):
-            #leggo solo i file che dopo l'undescore ha BA
-            if file.split('_')[1]=='DO.csv':
-                df_temp=pd.read_csv(os.path.join(path,file))
-                df_temp = df_temp[df_temp['action_id'] != 0]
-                df_list_doll.append(df_temp)
+    kid_elep=[] #bambini prima del filtro
+    kid_elep_no_null=[] #bambini dopo il filtro
 
-    df_doll = pd.concat(df_list_doll)
-    print("Dimensioni del df_doll con tutte le attività non nulle")
-    print(df_doll.shape)
-    print(df_doll.columns)
-    print(df_doll['action'].value_counts())
+    for file in matching_files:
+        print("Processing file:", file)
+        df = pd.read_csv(file)
+        print("Original shape:", df.shape)
+        kid_elep.append(df['kid_id'].unique())
+        # Filtra le righe con action_id non nullo
+        df = df[df['action_id'] != 0]
+        print("Filtered shape:", df.shape)
+        kid_elep_no_null.append(df['kid_id'].unique())
 
-    #salvo il dataframe
-    df_doll.to_csv(final_csv_path,index=False)
-    print(f"Salvato il dataframe df_DO_non_null.csv")
+        print("Columns:", df.columns)
+        print("Action counts:\n", df['action'].value_counts())
+        print("Toy counts:\n", df['toy_id'].value_counts())
+        print("="*50)  # Separatore tra i file
+
+    # Stampa gli utenti prima e dopo il filtraggio
+    print("Users before filtering:", kid_elep)
+    print("Users after filtering:", kid_elep_no_null)
+
+        # Creazione di un dataframe unificato per tutti i file che iniziano con BE, WE, GE, ecc.
+    df_elep_all = []  # Lista per contenere i dataframe filtrati
+
+    for file in matching_files:
+        df_temp = pd.read_csv(file)
+        df_temp = df_temp[df_temp['action_id'] != 0]  # Mantieni solo righe con attività non nulla
+        df_elep_all.append(df_temp)
+
+    # Unisci tutti i dataframe
+    df_elep = pd.concat(df_elep_all, ignore_index=True)
+
+    # Stampa informazioni sul dataframe finale
+    print("Dimensioni del dataframe unificato con tutte le attività non nulle")
+    print(df_elep.shape)
+    print(df_elep.columns)
+    print(df_elep['action'].value_counts())
+
+    # Salva il dataframe risultante
+    df_elep.to_csv(os.path.join(path, 'df_ELEP_non_null.csv'), index=False)
+
+
 
 
 #ora divido il dataframe in base all'attività (action_id) e salvo i dataframe in un file .csv
 #per ogni attività
 
-for action_id in df_doll['action_id'].unique():
-    df_action = df_doll[df_doll["action_id"] == action_id] #filtro il dataframe in base all'attività
-    print(f"Dimensioni del dataframe df_doll_action_{action_id}")
+for action_id in df_elep['action_id'].unique():
+    df_action = df_elep[df_elep["action_id"] == action_id] #filtro il dataframe in base all'attività
+    print(f"Dimensioni del dataframe df_elep_action_{action_id}")
     print(df_action.shape) #stampo le dimensioni del dataframe
     print(df_action.columns) #stampo le colonne del dataframe
     print(df_action['action'].value_counts()) #stampo il conteggio delle attività
     #salvo il dataframe
-    df_action.to_csv(os.path.join(path,f'df_doll_action_{action_id}.csv'),index=False) #index=False per non salvare l'indice
-    print(f"Salvato il dataframe df_doll_action_{action_id}.csv")
+    df_action.to_csv(os.path.join(path,f'df_elep_action_{action_id}.csv'),index=False) #index=False per non salvare l'indice
+    print(f"Salvato il dataframe df_elep_action_{action_id}.csv")
 
 
 #applico sliding window con la funzion process_csv
 #definisco i parametri
 nb_sensor_channels = 13
-sliding_window_length = 30
+sliding_window_length = 100
 sliding_window_step = 20
 
 #ora applico la funzione sliding window (che mi da come output x_window e y_window) a tutti i .csv relativi al toy palla
@@ -83,7 +116,7 @@ X= []
 Y= []
 
 for file in os.listdir(path):
-    if file.endswith('.csv') and file.split('_')[1] == 'doll':
+    if file.endswith('.csv') and file.split('_')[1] == 'elep':
         file_path = os.path.join(path, file)
         print(file_path)
         X_windows, Y_windows = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
@@ -95,7 +128,7 @@ X = np.concatenate(X, axis=0)
 Y = np.concatenate(Y, axis=0)
 
 #NUMERO TOTALE DI FINESTRE PER LA PALLA
-print("Numero totale di finestre per il giocattolo doll:")
+print("Numero totale di finestre per il giocattolo elep:")
 print(X.shape)
 print(Y.shape)
 
@@ -190,7 +223,7 @@ print("Tipo di Y_train:", type(Y_train))
 print("Tipo di Y_test:", type(Y_test))
 
 # Trova tutte le etichette uniche presenti nei dati
-unique_labels = np.unique(np.concatenate((Y_train, Y_test)))
+unique_labels = np.unique(Y_train)
 
 # Crea un dizionario che mappa ogni etichetta originale a un valore consecutivo
 label_mapping = {label: idx for idx, label in enumerate(unique_labels)}
@@ -234,10 +267,10 @@ def objective(trial):
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
     # Crea il modello con gli iperparametri suggeriti
-    net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13, sliding_window_length=30)
+    net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13)
 
     # Esegui l'allenamento
-    best_f1_score = train_toys.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
+    best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
     
     return best_f1_score
 
@@ -253,7 +286,7 @@ print("Highest F1-score: ", study.best_value)
 best_hyperparameters = study.best_params
 best_hyperparameters['best_f1_score'] = study.best_value
 best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_doll_without_sampler.csv'), index=False)
+best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_elep_without_sampler.csv'), index=False)
 
 
 
@@ -261,7 +294,7 @@ best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_d
 
 #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
 # è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
-file_name = "optimization_history_doll_without_sampler.png"
+file_name = "optimization_history_elep_without_sampler.png"
 fig=vis.plot_optimization_history(study)
 plt.show()
 
@@ -280,15 +313,18 @@ train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=T
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
 
 # Crea il modello con i migliori iperparametri
-best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13, sliding_window_length=30)
+best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13)
 
 # Esegui l'allenamento con i migliori iperparametri
-best_f1_score = train_toys_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_doll_without_sampler")
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_elep_without_sampler")
 
 # Salva il miglior modello
-model_save_path = os.path.join(MODELS_DIR, 'best_model_doll_without_sampler.pth')
+model_save_path = os.path.join(MODELS_DIR, 'best_model_elep_without_sampler.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
 print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")
+
+
+
 
 

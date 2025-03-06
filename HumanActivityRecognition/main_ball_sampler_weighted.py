@@ -5,12 +5,12 @@ from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 import sliding_window_on_data
 from torch.utils.data import DataLoader
 
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset 
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset , collate_fn, create_weighted_sampler
 import optuna
 import optuna.visualization as vis
-import train_toys
+import train
 import torch
-import train_toys_with_cm
+import train_with_cm
 import matplotlib.pyplot as plt
 #definisco il path da cui leggere i .csv
 
@@ -28,46 +28,46 @@ print(path)
 
 
 # Nome del file CSV finale
-final_csv_path = os.path.join(path, 'df_DO_non_null.csv')
+final_csv_path = os.path.join(path, 'df_BA_non_null.csv')
 
 # Controllo se il file esiste già
 if os.path.exists(final_csv_path):
     print(f"Il file {final_csv_path} esiste già. Lo sto caricando...")
-    df_doll = pd.read_csv(final_csv_path)
+    df_ball = pd.read_csv(final_csv_path)
 else:
 
-    df_list_doll = [] #lista vuota per appendere i dataframe con attività non nulla
+    df_list_ball = [] #lista vuota per appendere i dataframe con attività non nulla
     for file in os.listdir(path):
         if file.endswith('.csv'):
             #leggo solo i file che dopo l'undescore ha BA
-            if file.split('_')[1]=='DO.csv':
+            if file.split('_')[1]=='BA.csv':
                 df_temp=pd.read_csv(os.path.join(path,file))
                 df_temp = df_temp[df_temp['action_id'] != 0]
-                df_list_doll.append(df_temp)
+                df_list_ball.append(df_temp)
 
-    df_doll = pd.concat(df_list_doll)
-    print("Dimensioni del df_doll con tutte le attività non nulle")
-    print(df_doll.shape)
-    print(df_doll.columns)
-    print(df_doll['action'].value_counts())
+    df_ball = pd.concat(df_list_ball)
+    print("Dimensioni del df_ball con tutte le attività non nulle")
+    print(df_ball.shape)
+    print(df_ball.columns)
+    print(df_ball['action'].value_counts())
 
     #salvo il dataframe
-    df_doll.to_csv(final_csv_path,index=False)
-    print(f"Salvato il dataframe df_DO_non_null.csv")
+    df_ball.to_csv(final_csv_path,index=False)
+    print(f"Salvato il dataframe df_BA_non_null.csv")
 
 
 #ora divido il dataframe in base all'attività (action_id) e salvo i dataframe in un file .csv
 #per ogni attività
 
-for action_id in df_doll['action_id'].unique():
-    df_action = df_doll[df_doll["action_id"] == action_id] #filtro il dataframe in base all'attività
-    print(f"Dimensioni del dataframe df_doll_action_{action_id}")
+for action_id in df_ball['action_id'].unique():
+    df_action = df_ball[df_ball["action_id"] == action_id] #filtro il dataframe in base all'attività
+    print(f"Dimensioni del dataframe df_ball_action_{action_id}")
     print(df_action.shape) #stampo le dimensioni del dataframe
     print(df_action.columns) #stampo le colonne del dataframe
     print(df_action['action'].value_counts()) #stampo il conteggio delle attività
     #salvo il dataframe
-    df_action.to_csv(os.path.join(path,f'df_doll_action_{action_id}.csv'),index=False) #index=False per non salvare l'indice
-    print(f"Salvato il dataframe df_doll_action_{action_id}.csv")
+    df_action.to_csv(os.path.join(path,f'df_ball_action_{action_id}.csv'),index=False) #index=False per non salvare l'indice
+    print(f"Salvato il dataframe df_ball_action_{action_id}.csv")
 
 
 #applico sliding window con la funzion process_csv
@@ -83,7 +83,7 @@ X= []
 Y= []
 
 for file in os.listdir(path):
-    if file.endswith('.csv') and file.split('_')[1] == 'doll':
+    if file.endswith('.csv') and file.split('_')[1] == 'ball':
         file_path = os.path.join(path, file)
         print(file_path)
         X_windows, Y_windows = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
@@ -95,7 +95,7 @@ X = np.concatenate(X, axis=0)
 Y = np.concatenate(Y, axis=0)
 
 #NUMERO TOTALE DI FINESTRE PER LA PALLA
-print("Numero totale di finestre per il giocattolo doll:")
+print("Numero totale di finestre per il giocattolo ball:")
 print(X.shape)
 print(Y.shape)
 
@@ -190,7 +190,7 @@ print("Tipo di Y_train:", type(Y_train))
 print("Tipo di Y_test:", type(Y_test))
 
 # Trova tutte le etichette uniche presenti nei dati
-unique_labels = np.unique(np.concatenate((Y_train, Y_test)))
+unique_labels = np.unique(Y_train)
 
 # Crea un dizionario che mappa ogni etichetta originale a un valore consecutivo
 label_mapping = {label: idx for idx, label in enumerate(unique_labels)}
@@ -219,25 +219,25 @@ print("Tipo di train_dataset:", type(train_dataset))
 print("Tipo di test_dataset:", type(test_dataset))
 
 
-
+train_sampler=create_weighted_sampler(Y_train_mapped)
 
 
 
 def objective(trial):
     # Definisci gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    batch_size = trial.suggest_categorical('batch_size', [4, 8, 12, 16])
+    batch_size = trial.suggest_categorical('batch_size', [8, 12, 16])
 
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,drop_last=True, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,drop_last=True, sampler=train_sampler, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
     # Crea il modello con gli iperparametri suggeriti
     net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13, sliding_window_length=30)
 
     # Esegui l'allenamento
-    best_f1_score = train_toys.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
+    best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr, f1_average="weighted")
     
     return best_f1_score
 
@@ -253,7 +253,7 @@ print("Highest F1-score: ", study.best_value)
 best_hyperparameters = study.best_params
 best_hyperparameters['best_f1_score'] = study.best_value
 best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_doll_without_sampler.csv'), index=False)
+best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_with_sampler_weighted.csv'), index=False)
 
 
 
@@ -261,7 +261,7 @@ best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_d
 
 #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
 # è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
-file_name = "optimization_history_doll_without_sampler.png"
+file_name = "optimization_history_ball_with_sampler_weighted.png"
 fig=vis.plot_optimization_history(study)
 plt.show()
 
@@ -276,19 +276,17 @@ best_lr = study.best_params['lr']
 best_batch_size = study.best_params['batch_size']
 
 # Crea i DataLoader con i migliori iperparametri
-train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=True, shuffle=True)
+train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=True, sampler=train_sampler, collate_fn=collate_fn)
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
 
 # Crea il modello con i migliori iperparametri
 best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13, sliding_window_length=30)
 
 # Esegui l'allenamento con i migliori iperparametri
-best_f1_score = train_toys_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_doll_without_sampler")
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_with_sampler_weighted", f1_average="weighted")
 
 # Salva il miglior modello
-model_save_path = os.path.join(MODELS_DIR, 'best_model_doll_without_sampler.pth')
+model_save_path = os.path.join(MODELS_DIR, 'best_model_ball_with_sampler_weighted.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
 print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")
-
-

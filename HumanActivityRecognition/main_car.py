@@ -1,14 +1,17 @@
 import os
 import pandas as pd
 import numpy as np
-from app_config import PROJ_ROOT, DATA_DIR, REPORTS_DIR
+from app_config import PROJ_ROOT, DATA_DIR, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 import sliding_window_on_data
 from torch.utils.data import DataLoader
 import glob
-from models.DeepConvLST_toys import DeepConvLSTM, HARDataset, collate_fn, create_weighted_sampler
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn, create_weighted_sampler
 import optuna
 import optuna.visualization as vis
-import train_toys
+import train
+import train_with_cm
+import matplotlib.pyplot as plt
+import torch
 
 #definisco il path da cui leggere i .csv
 
@@ -16,70 +19,89 @@ path='C:\codes\HumanActivityRecognition\data\pdd_data'
 print(path)
 
 
-#trovo tutti i file che corrispondono a "C*" nella cartella path
-#e li stampo a schermo
-files = glob.glob(os.path.join(path, "*_C*.csv"))
-print("Files:", files)
 
-
-#trovo tutti i file che corrispondono a "C*" nella cartella path
-#e li stampo a schermo
-files = glob.glob(os.path.join(path, "*_C*.csv"))
-print("Files:", files)
-#lista per salvare utenti prima del merge 
-kid_be= []
-#lista per salvare utenti dopo il merge
-kid_be_no_null = []
-#per ogni file nella lista files
-#leggo il file e stampo le dimensioni del dataframe, le colonne, il conteggio delle attività e il conteggio dei giocattoli
-for file in files:
-    print(f"Processing: {file}")
-    df = pd.read_csv(file)
-    
-    print("Original shape:", df.shape)
-    kid_be.append(df['kid_id'].unique())
-    df = df[df['action_id'] != 0] #filtro le righe con action_id non nullo
-    print("Filtered shape:", df.shape)
-    kid_be_no_null.append(df['kid_id'].unique())
-
-    print("Columns:", df.columns)
-    print("Action counts:\n", df['action'].value_counts())
-    print("Toy counts:\n", df['toy_id'].value_counts())
-    print("="*50)  # Separatore tra i file
-
-#mi stampo gli utenti prima di fare il merge e dopo il merge
-print("Users before merge:", kid_be)
-print("Users after merge:", kid_be_no_null)
 
 #Visto che l'informazione relativa all'id del bambino lo abbiamo, così come abbiamo anche l'informazione relativa
 #al giocattolo, vado a filtrare i .csv in modo tale da avere solo le righe che hanno l'attività non nulla e poi
 #appendo tutte le righe delle righe non nulle in un unico dataframe
 #per tutti i file che terminano in .csv nella cartella path
+# Definisco il percorso della cartella contenente i CSV
 
-df_list_be = [] #lista vuota per appendere i dataframe con attività non nulla
-for file in os.listdir(path):
-    if file.endswith('.csv'):
-        #leggo solo i file che dopo l'undescore ha BE*.csv
-        if file.split('_')[-1].startswith('C') and file.endswith('.csv'): #controllo che il file termini con .csv
-            df_temp=pd.read_csv(os.path.join(path,file))
-            df_temp = df_temp[df_temp['action_id'] != 0]
-            df_list_be.append(df_temp)
 
-df_be = pd.concat(df_list_be)
-print("Dimensioni del df_be con tutte le attività non nulle")
-print(df_be.shape)
-print(df_be.columns)
-print(df_be['action'].value_counts())
+# Nome del file CSV finale
+final_csv_path = os.path.join(path, 'df_CAR_non_null.csv')
 
-#salvo il dataframe
-df_be.to_csv(os.path.join(path,'df_CAR_non_null.csv'),index=False)
+# Controllo se il file esiste già
+if os.path.exists(final_csv_path):
+    print(f"Il file {final_csv_path} esiste già. Lo sto caricando...")
+    df_car = pd.read_csv(final_csv_path)
+else:
+
+
+    #trovo tutti i file che corrispondono a "C*" nella cartella path
+    #e li stampo a schermo
+    files = glob.glob(os.path.join(path, "*_C*.csv"))
+    print("Files:", files)
+
+
+    #trovo tutti i file che corrispondono a "C*" nella cartella path
+    #e li stampo a schermo
+    files = glob.glob(os.path.join(path, "*_C*.csv"))
+    print("Files:", files)
+    #lista per salvare utenti prima del merge 
+    kid_car= []
+    #lista per salvare utenti dopo il merge
+    kid_car_no_null = []
+    #per ogni file nella lista files
+    #leggo il file e stampo le dimensioni del dataframe, le colonne, il conteggio delle attività e il conteggio dei giocattoli
+    for file in files:
+        print(f"Processing: {file}")
+        df = pd.read_csv(file)
+        
+        print("Original shape:", df.shape)
+        kid_car.append(df['kid_id'].unique())
+        df = df[df['action_id'] != 0] #filtro le righe con action_id non nullo
+        print("Filtered shape:", df.shape)
+        kid_car_no_null.append(df['kid_id'].unique())
+
+        print("Columns:", df.columns)
+        print("Action counts:\n", df['action'].value_counts())
+        print("Toy counts:\n", df['toy_id'].value_counts())
+        print("="*50)  # Separatore tra i file
+
+    #mi stampo gli utenti prima di fare il merge e dopo il merge
+    print("Users before merge:", kid_car)
+    print("Users after merge:", kid_car_no_null)
+
+    #Visto che l'informazione relativa all'id del bambino lo abbiamo, così come abbiamo anche l'informazione relativa
+    #al giocattolo, vado a filtrare i .csv in modo tale da avere solo le righe che hanno l'attività non nulla e poi
+    #appendo tutte le righe delle righe non nulle in un unico dataframe
+    #per tutti i file che terminano in .csv nella cartella path
+
+    df_list_car = [] #lista vuota per appendere i dataframe con attività non nulla
+    for file in os.listdir(path):
+        if file.endswith('.csv'):
+            #leggo solo i file che dopo l'undescore ha BE*.csv
+            if file.split('_')[-1].startswith('C') and file.endswith('.csv'): #controllo che il file termini con .csv
+                df_temp=pd.read_csv(os.path.join(path,file))
+                df_temp = df_temp[df_temp['action_id'] != 0]
+                df_list_car.append(df_temp)
+
+    df_car = pd.concat(df_list_car)
+    print("Dimensioni del df_car con tutte le attività non nulle")
+    print(df_car.shape)
+    print(df_car.columns)
+    print(df_car['action'].value_counts())
+
+    #salvo il dataframe
+    df_car.to_csv(os.path.join(path,'df_CAR_non_null.csv'),index=False)
 
 
 #ora divido il dataframe in base all'attività (action_id) e salvo i dataframe in un file .csv
 #per ogni attività
 
-for action_id in df_be['action_id'].unique():
-    df_action = df_be[df_be["action_id"] == action_id] #filtro il dataframe in base all'attività
+for action_id in df_car['action_id'].unique():
+    df_action = df_car[df_car["action_id"] == action_id] #filtro il dataframe in base all'attività
     print(f"Dimensioni del dataframe df_car_action_{action_id}")
     print(df_action.shape) #stampo le dimensioni del dataframe
     print(df_action.columns) #stampo le colonne del dataframe
@@ -282,10 +304,10 @@ def objective(trial):
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
     # Crea il modello con gli iperparametri suggeriti
-    net = DeepConvLSTM(n_classes=len(unique_labels))
+    net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13)
 
     # Esegui l'allenamento
-    best_f1_score = train_toys.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
+    best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
     
     return best_f1_score
 
@@ -296,12 +318,47 @@ study.optimize(objective, n_trials=100)
 print("Best hyperparameters: ", study.best_params)
 print("Highest F1-score: ", study.best_value)
 
-#salvo i best hyperparameters in REPORTS_DIR
-best_params = study.best_params
-best_params_file = os.path.join(REPORTS_DIR, "best_params_car.json")
 
-#visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come la loss
-# è cambiata nel corso delle diverse prove (trials) durante l'ottimizzazione.
-vis.plot_optimization_history(study)
+#salvo i best hyperparameters
+best_hyperparameters = study.best_params
+best_hyperparameters['best_f1_score'] = study.best_value
+best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
+best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_car_without_sampler.csv'), index=False)
+
+
+
+
+
+#visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
+# è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
+file_name = "optimization_history_car_without_sampler.png"
+fig=vis.plot_optimization_history(study)
+plt.show()
+
+# Salvo il grafico nella cartella FIGURES con il nome specificato
+fig.write_image(os.path.join(FIGURES_DIR, file_name))
+
+print(f"Grafico salvato in figures /{file_name}")
+
+
+# Ora crea e allena il modello con i migliori iperparametri
+best_lr = study.best_params['lr']
+best_batch_size = study.best_params['batch_size']
+
+# Crea i DataLoader con i migliori iperparametri
+train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=True, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
+
+# Crea il modello con i migliori iperparametri
+best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13)
+
+# Esegui l'allenamento con i migliori iperparametri
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_car_without_sampler")
+
+# Salva il miglior modello
+model_save_path = os.path.join(MODELS_DIR, 'best_model_car_without_sampler.pth')
+torch.save(best_net.state_dict(), model_save_path)
+
+print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")
 
 

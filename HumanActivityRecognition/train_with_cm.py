@@ -9,7 +9,7 @@ from utils import check_gpu
 
 train_on_gpu=check_gpu.check_gpu_availability()
 
-"""class EarlyStopper:
+class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
         self.patience = patience
         self.min_delta = min_delta
@@ -24,11 +24,11 @@ train_on_gpu=check_gpu.check_gpu_availability()
             self.counter += 1
             if self.counter >= self.patience:
                 return True
-        return False"""
+        return False
 
 
 
-class EarlyStopper:
+"""class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
         self.patience = patience
         self.min_delta = min_delta
@@ -43,9 +43,9 @@ class EarlyStopper:
             self.counter += 1  # Inizia a contare quando l'F1-score non migliora
             if self.counter >= self.patience:  # Se non migliora per 'patience' epoche
                 return True  # Fermati
-        return False
+        return False"""
 
-def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, patience=7, figure_name="figure"):
+def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, patience=7, figure_name="figure", f1_average='macro'):
 
     os.makedirs(FIGURES_DIR, exist_ok=True)  # Assicura che la cartella per le figure esista
 
@@ -72,7 +72,7 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
         for inputs, targets in train_loader: 
             if train_on_gpu:
                 inputs, targets = inputs.cuda(), targets.cuda()
-
+            batch_size = inputs.size(0)
             h = net.init_hidden(batch_size)
             opt.zero_grad()
             output, h = net(inputs, h, batch_size)
@@ -92,6 +92,7 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
 
         with torch.no_grad():
             for inputs, targets in test_loader:
+                batch_size = inputs.size(0)
                 val_h = tuple([each.data for each in val_h])
 
                 if train_on_gpu:
@@ -104,7 +105,7 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
                 top_p, top_class = output.topk(1, dim=1)
                 equals = top_class == targets.view(*top_class.shape).long()
                 accuracy += torch.mean(equals.type(torch.FloatTensor))
-                f1score += f1_score(top_class.cpu(), targets.view(*top_class.shape).long().cpu(), average='weighted')
+                f1score += f1_score(top_class.cpu(), targets.view(*top_class.shape).long().cpu(), average=f1_average)
 
         val_loss_history.append(np.mean(val_losses))
         val_accuracy_history.append(accuracy / len(test_loader))
@@ -124,10 +125,10 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
 
 
         # Early stopping
-        if early_stopper.early_stop(current_f1score):
-            print("Early stopping triggered.")
-            net.eval()
+        if early_stopper.early_stop(np.mean(val_losses)):
+            print("Early stopping triggered")
             break
+
 
 
     # Confusion Matrix
