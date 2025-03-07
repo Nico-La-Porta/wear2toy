@@ -72,9 +72,9 @@ for action_id in df_ball['action_id'].unique():
 
 #applico sliding window con la funzion process_csv
 #definisco i parametri
-nb_sensor_channels = 13
-sliding_window_length = 30
-sliding_window_step = 20
+nb_sensor_channels = 9
+sliding_window_length = 100
+sliding_window_step = 25
 
 #ora applico la funzione sliding window (che mi da come output x_window e y_window) a tutti i .csv relativi al toy palla
 #e poi concateno tutto in un unica x_train, y_train
@@ -234,7 +234,7 @@ def objective(trial):
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
     # Crea il modello con gli iperparametri suggeriti
-    net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13, sliding_window_length=30)
+    net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=9, sliding_window_length=100)
 
     # Esegui l'allenamento
     best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr, f1_average="weighted")
@@ -280,7 +280,7 @@ train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=T
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
 
 # Crea il modello con i migliori iperparametri
-best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13, sliding_window_length=30)
+best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=9, sliding_window_length=100)
 
 # Esegui l'allenamento con i migliori iperparametri
 best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_with_sampler_weighted", f1_average="weighted")

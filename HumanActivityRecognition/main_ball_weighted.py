@@ -236,7 +236,7 @@ def objective(trial):
     net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=9, sliding_window_length=100)
 
     # Esegui l'allenamento
-    best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr, f1_average="macro")
+    best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr, f1_average="weighted")
     
     return best_f1_score
 
@@ -252,7 +252,7 @@ print("Highest F1-score: ", study.best_value)
 best_hyperparameters = study.best_params
 best_hyperparameters['best_f1_score'] = study.best_value
 best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_without_sampler_macro.csv'), index=False)
+best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_without_sampler_weighted.csv'), index=False)
 
 
 
@@ -260,7 +260,7 @@ best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_b
 
 #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
 # è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
-file_name = "optimization_history_ball_without_sampler_macro.png"
+file_name = "optimization_history_ball_without_sampler_weighted.png"
 fig=vis.plot_optimization_history(study)
 plt.show()
 
@@ -282,10 +282,10 @@ test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False
 best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=9, sliding_window_length=100)
 
 # Esegui l'allenamento con i migliori iperparametri
-best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_without_sampler_macro", f1_average="macro")
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_without_sampler_weighted", f1_average="weighted")
 
 # Salva il miglior modello
-model_save_path = os.path.join(MODELS_DIR, 'best_model_ball_without_sampler_macro.pth')
+model_save_path = os.path.join(MODELS_DIR, 'best_model_ball_without_sampler_weighted.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
 print(f"Best model trained without the optimal hyperparameters and saved at {model_save_path}")

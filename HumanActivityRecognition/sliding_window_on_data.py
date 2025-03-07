@@ -57,9 +57,9 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
     print("Colonne nel dataset:", df.columns.tolist())
     
     # Rimozione delle colonne non necessarie
-    X_data = df.drop(columns=['Timestamp', 'Date_time', 'action', 'action_id', 'G',
+    X_data = df.drop(columns=['Timestamp', 'Mag_X', 'Mag_Y', 'Mag_Z','Date_time', 'action', 'action_id', 'G',
                               'communication', 'social_interaction', 'restricted_repetitive_behaviour',
-                              'ados_total_score', 'I', 'E', 'toy_id'])
+                              'ados_total_score', 'I', 'E', 'toy_id','kid_id'])
     
     print("Feature selezionate:", X_data.columns.tolist())
     X_data = X_data.to_numpy()

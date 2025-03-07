@@ -1,17 +1,18 @@
 import os
 import pandas as pd
 import numpy as np
-from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
+from app_config import REPORTS_DIR, FIGURES_DIR
 import sliding_window_on_data
 from torch.utils.data import DataLoader
-
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset 
+import torch
+import torch.nn as nn
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset
 import optuna
 import optuna.visualization as vis
 import train
-import torch
 import train_with_cm
 import matplotlib.pyplot as plt
+
 #definisco il path da cui leggere i .csv
 
 path='C:\codes\HumanActivityRecognition\data\pdd_data'
@@ -20,40 +21,31 @@ print(path)
 
 
 
+
+
+
 #Visto che l'informazione relativa all'id del bambino lo abbiamo, così come abbiamo anche l'informazione relativa
 #al giocattolo, vado a filtrare i .csv in modo tale da avere solo le righe che hanno l'attività non nulla e poi
 #appendo tutte le righe delle righe non nulle in un unico dataframe
 #per tutti i file che terminano in .csv nella cartella path
-# Definisco il percorso della cartella contenente i CSV
 
+df_list_ball = [] #lista vuota per appendere i dataframe con attività non nulla
+for file in os.listdir(path):
+    if file.endswith('.csv'):
+        #leggo solo i file che dopo l'undescore ha BA
+        if file.split('_')[1]=='BA.csv':
+            df_temp=pd.read_csv(os.path.join(path,file))
+            df_temp = df_temp[df_temp['action_id'] != 0]
+            df_list_ball.append(df_temp)
 
-# Nome del file CSV finale
-final_csv_path = os.path.join(path, 'df_BA_non_null.csv')
+df_ball = pd.concat(df_list_ball)
+print("Dimensioni del df_ball con tutte le attività non nulle")
+print(df_ball.shape)
+print(df_ball.columns)
+print(df_ball['action'].value_counts())
 
-# Controllo se il file esiste già
-if os.path.exists(final_csv_path):
-    print(f"Il file {final_csv_path} esiste già. Lo sto caricando...")
-    df_ball = pd.read_csv(final_csv_path)
-else:
-
-    df_list_ball = [] #lista vuota per appendere i dataframe con attività non nulla
-    for file in os.listdir(path):
-        if file.endswith('.csv'):
-            #leggo solo i file che dopo l'undescore ha BA
-            if file.split('_')[1]=='BA.csv':
-                df_temp=pd.read_csv(os.path.join(path,file))
-                df_temp = df_temp[df_temp['action_id'] != 0]
-                df_list_ball.append(df_temp)
-
-    df_ball = pd.concat(df_list_ball)
-    print("Dimensioni del df_ball con tutte le attività non nulle")
-    print(df_ball.shape)
-    print(df_ball.columns)
-    print(df_ball['action'].value_counts())
-
-    #salvo il dataframe
-    df_ball.to_csv(final_csv_path,index=False)
-    print(f"Salvato il dataframe df_BA_non_null.csv")
+#salvo il dataframe
+df_ball.to_csv(os.path.join(path,'df_BA_non_null.csv'),index=False)
 
 
 #ora divido il dataframe in base all'attività (action_id) e salvo i dataframe in un file .csv
@@ -179,6 +171,12 @@ print("Tipo di Y_train:", type(Y_train))
 print("Tipo di X_test:", type(X_test))
 print("Tipo di Y_test:", type(Y_test))
 
+#rimuovo colonne in eccesso in x_train e x_test (rimangono solo le prime 9 colonne)
+X_train = X_train[:, :, :9]
+X_test = X_test[:, :, :9]
+print("Dimensioni di X_train e X_test dopo aver rimosso le colonne in eccesso:")
+print(X_train.shape, X_test.shape)
+
 Y_train = Y_train.flatten()
 Y_test = Y_test.flatten()
 
@@ -222,22 +220,45 @@ print("Tipo di test_dataset:", type(test_dataset))
 
 
 
+
+
+
+
+
 def objective(trial):
     # Definisci gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    batch_size = trial.suggest_categorical('batch_size', [8, 12, 16])
+    batch_size = trial.suggest_categorical('batch_size', [4, 8, 12])
 
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,drop_last=True, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,shuffle=True, drop_last=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
-    # Crea il modello con gli iperparametri suggeriti
-    net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=9, sliding_window_length=100)
+    # Crea il modello con gli iperparametri suggeriti# Carica il modello preaddestratocd
+    model = DeepConvLSTM()
+
+        # Rimuovi la testa originale, in modo da non caricare i pesi associati
+    model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_without_sampler.pth'), strict=False)
+
+
+    # Ora sostituisco la testa del modello con la nuova dimensione di classi (4)
+    num_ftrs = model.fc.in_features
+    model.fc = nn.Linear(num_ftrs, 4)  # 4 classi
+    model.set_n_classes(4)
+
+
+    # Congelo tutti i parametri tranne quelli della testa (fully connected)
+    for param in model.parameters():
+        param.requires_grad = False  # Congela tutti i pesi
+
+    # Sblocca i parametri della testa (fully connected)
+    for param in model.fc.parameters():
+        param.requires_grad = True  # Solo i pesi della testa saranno addestrabili
 
     # Esegui l'allenamento
-    best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr, f1_average="macro")
-    
+    best_f1_score = train.train(model, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr, f1_average="macro")
+
     return best_f1_score
 
 # Creazione studio Optuna ottimizza, nel senso di minimizzare la loss in 100 prove
@@ -252,15 +273,14 @@ print("Highest F1-score: ", study.best_value)
 best_hyperparameters = study.best_params
 best_hyperparameters['best_f1_score'] = study.best_value
 best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_without_sampler_macro.csv'), index=False)
+best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_inference_sampler_macro.csv'), index=False)
 
 
 
 
-
-#visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
-# è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
-file_name = "optimization_history_ball_without_sampler_macro.png"
+#visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come la loss
+# è cambiata nel corso delle diverse prove (trials) durante l'ottimizzazione.
+file_name = "optimization_history_inference_ball_without_sampler_macro.png"
 fig=vis.plot_optimization_history(study)
 plt.show()
 
@@ -270,6 +290,33 @@ fig.write_image(os.path.join(FIGURES_DIR, file_name))
 print(f"Grafico salvato in figures /{file_name}")
 
 
+
+
+
+
+    # Crea il modello con gli iperparametri suggeriti# Carica il modello preaddestratocd
+model = DeepConvLSTM()
+
+        # Rimuovi la testa originale, in modo da non caricare i pesi associati
+model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_without_sampler.pth'), strict=False)
+
+    # Ora sostituisci la testa del modello con la nuova dimensione di classi (4)
+num_ftrs = model.fc.in_features
+model.fc = nn.Linear(num_ftrs, 4)  # 4 classi
+model.set_n_classes(4)
+
+
+    # Congela tutti i parametri tranne quelli della testa (fully connected)
+for param in model.parameters():
+        param.requires_grad = False  # Congela tutti i pesi
+
+    # Sblocca i parametri della testa (fully connected)
+for param in model.fc.parameters():
+    param.requires_grad = True  # Solo i pesi della testa saranno addestrabili
+
+for name, param in model.named_parameters():
+    print(f"{name} requires_grad={param.requires_grad}")
+
 # Ora crea e allena il modello con i migliori iperparametri
 best_lr = study.best_params['lr']
 best_batch_size = study.best_params['batch_size']
@@ -278,14 +325,6 @@ best_batch_size = study.best_params['batch_size']
 train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=True, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
 
-# Crea il modello con i migliori iperparametri
-best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=9, sliding_window_length=100)
 
-# Esegui l'allenamento con i migliori iperparametri
-best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_without_sampler_macro", f1_average="macro")
-
-# Salva il miglior modello
-model_save_path = os.path.join(MODELS_DIR, 'best_model_ball_without_sampler_macro.pth')
-torch.save(best_net.state_dict(), model_save_path)
-
-print(f"Best model trained without the optimal hyperparameters and saved at {model_save_path}")
+best_f1_score = train_with_cm.train(model, train_loader, test_loader, epochs=100,batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_inference_without_sampler_macro", patience=7, f1_average='macro')
+print(f"Best F1 score: {best_f1_score}")

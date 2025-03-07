@@ -9,7 +9,7 @@ from utils import check_gpu
 
 train_on_gpu=check_gpu.check_gpu_availability()
 
-class EarlyStopper:
+"""class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
         self.patience = patience
         self.min_delta = min_delta
@@ -24,11 +24,11 @@ class EarlyStopper:
             self.counter += 1
             if self.counter >= self.patience:
                 return True
-        return False
+        return False"""
 
 
 
-"""class EarlyStopper:
+class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
         self.patience = patience
         self.min_delta = min_delta
@@ -43,7 +43,7 @@ class EarlyStopper:
             self.counter += 1  # Inizia a contare quando l'F1-score non migliora
             if self.counter >= self.patience:  # Se non migliora per 'patience' epoche
                 return True  # Fermati
-        return False"""
+        return False
 
 def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, patience=7, figure_name="figure", f1_average='macro'):
 
@@ -57,10 +57,18 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
     if train_on_gpu:
         net.cuda()
 
+    #storicizzo i valori di loss e accuracy
     train_loss_history = [] 
     val_loss_history = [] 
     val_accuracy_history = []
     val_f1score_history = []
+    train_f1score_history = []
+
+    #liste perr le predizioni e i target
+    all_train_preds = []
+    all_train_labels = []
+    all_test_preds = []
+    all_test_labels = []
 
     best_f1score = 0
     early_stopper = EarlyStopper(patience=patience, min_delta=0.001)
@@ -69,6 +77,8 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
         train_losses = []
         net.train()
 
+        #calcolo dell'f1-score di train
+        train_f1score = 0 #variabile per l'f1-score di train
         for inputs, targets in train_loader: 
             if train_on_gpu:
                 inputs, targets = inputs.cuda(), targets.cuda()
@@ -82,7 +92,16 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
             loss.backward()
             opt.step()
 
+            #salvo le predizioni e i target per la confusion matrix di training
+            _, predicted = torch.max(output, 1) #prendo la classe con probabilità maggiore
+            all_train_preds.extend(predicted.cpu().numpy()) #aggiungo le predizioni alla lista
+            all_train_labels.extend(targets.cpu().numpy()) #aggiungo i target alla lista
+
+            #calcolo l'f1-score
+            train_f1score += f1_score(predicted.cpu(), targets.cpu(), average=f1_average)
+        
         train_loss_history.append(np.mean(train_losses))
+        train_f1score_history.append(train_f1score / len(train_loader)) #calcolo l'f1-score medio
 
         val_h = net.init_hidden(batch_size)
         val_losses = []
@@ -107,6 +126,10 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
                 accuracy += torch.mean(equals.type(torch.FloatTensor))
                 f1score += f1_score(top_class.cpu(), targets.view(*top_class.shape).long().cpu(), average=f1_average)
 
+                #salvo le predizioni e i target per la confusion matrix di test
+                all_test_preds.extend(top_class.cpu().numpy().flatten()) # flatten() per avere un array 1D
+                all_test_labels.extend(targets.cpu().numpy())
+
         val_loss_history.append(np.mean(val_losses))
         val_accuracy_history.append(accuracy / len(test_loader))
         val_f1score_history.append(f1score / len(test_loader))
@@ -124,42 +147,58 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
             best_f1score = current_f1score
 
 
-        # Early stopping
-        if early_stopper.early_stop(np.mean(val_losses)):
-            print("Early stopping triggered")
+        # Early stopping basato sull'F1-score
+        if early_stopper.early_stop(current_f1score):
+            net.eval()
             break
-
-
-
-    # Confusion Matrix
-    all_preds = []
-    all_labels = []
-    with torch.no_grad():
-        for inputs, targets in test_loader:
-            if train_on_gpu:
-                inputs, targets = inputs.cuda(), targets.cuda()
-
-            output, _ = net(inputs, None, batch_size)
-            _, predicted = torch.max(output, 1)
-            all_preds.extend(predicted.cpu().numpy())
-            all_labels.extend(targets.cpu().numpy())
-
-    cm = confusion_matrix(all_labels, all_preds)
+    
+    # Matrice di confusione per il training set
+    cm_train = confusion_matrix(all_train_labels, all_train_preds)
     plt.figure(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=test_loader.dataset.classes, yticklabels=test_loader.dataset.classes)
-    plt.title("Confusion Matrix")
+    sns.heatmap(cm_train, annot=True, fmt="d", cmap="Greens", xticklabels=train_loader.dataset.classes, yticklabels=train_loader.dataset.classes)
+    plt.title("Confusion Matrix - Train Set")
     plt.xlabel("Predicted")
     plt.ylabel("True")
-    plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_confusion_matrix.png"))
-    plt.close()  # Chiude la figura
+    plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_train_confusion_matrix.png"))
+    plt.close()
 
-    # Curva di validazione F1-score
+
+    # Confusion Matrix - Test Set
+    cm_test = confusion_matrix(all_test_labels, all_test_preds)
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm_test, annot=True, fmt="d", cmap="Blues", xticklabels=test_loader.dataset.classes, yticklabels=test_loader.dataset.classes)
+    plt.title("Confusion Matrix - Test Set")
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_test_confusion_matrix.png"))
+    plt.close()
+
+
+
+
+    # Curve di train e validazione F1-score
     plt.figure(figsize=(10, 6))
-    plt.plot(val_f1score_history, label="F1-Score", color="green")
+    plt.plot(train_f1score_history, label="Train F1-Score", color="blue")
+    plt.plot(val_f1score_history, label="Test F1-Score", color="green")
     plt.xlabel("Epochs")
     plt.ylabel("F1-Score")
-    plt.title("Validation F1-Score")
+    plt.title("F1-Score (Train vs Test)")
     plt.legend()
+
+    # Trovo l'epoch con il valore massimo di F1-score
+    max_f1_epoch = np.argmax(val_f1score_history)
+    max_f1_value = val_f1score_history[max_f1_epoch]
+    max_train_f1_epoch = np.argmax(train_f1score_history)
+    max_train_f1_value = train_f1score_history[max_train_f1_epoch]
+
+
+    # Aggiungi i punti e le annotazioni nel grafico per il massimo F1-score
+    plt.scatter(max_f1_epoch, max_f1_value, color="red", label=f"Max Val F1: {max_f1_value:.6f}")
+    plt.text(max_f1_epoch, max_f1_value, f"{max_f1_value:.6f}", fontsize=12, verticalalignment='bottom', color="red")
+    
+    plt.scatter(max_train_f1_epoch, max_train_f1_value, color="orange", label=f"Max Train F1: {max_train_f1_value:.6f}")
+    plt.text(max_train_f1_epoch, max_train_f1_value, f"{max_train_f1_value:.6f}", fontsize=12, verticalalignment='bottom', color="orange")
+
     plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_f1score_curve.png"))
     plt.close()  # Chiude la figura
 

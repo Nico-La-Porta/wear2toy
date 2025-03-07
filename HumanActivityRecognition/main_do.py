@@ -8,9 +8,9 @@ from torch.utils.data import DataLoader
 from models.DeepConvLSTM import DeepConvLSTM, HARDataset 
 import optuna
 import optuna.visualization as vis
-import train_toys
+import train
 import torch
-import train_toys_with_cm
+import train_with_cm
 import matplotlib.pyplot as plt
 #definisco il path da cui leggere i .csv
 
@@ -237,7 +237,7 @@ def objective(trial):
     net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13, sliding_window_length=30)
 
     # Esegui l'allenamento
-    best_f1_score = train_toys.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
+    best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
     
     return best_f1_score
 
@@ -283,7 +283,7 @@ test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False
 best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13, sliding_window_length=30)
 
 # Esegui l'allenamento con i migliori iperparametri
-best_f1_score = train_toys_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_doll_without_sampler")
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_doll_without_sampler")
 
 # Salva il miglior modello
 model_save_path = os.path.join(MODELS_DIR, 'best_model_doll_without_sampler.pth')
