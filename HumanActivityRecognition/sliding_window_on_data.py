@@ -5,6 +5,7 @@ import pandas as pd
 from app_config import PROJ_ROOT
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 from utils import data_processing
+from utils.log_config import logger
 
 # Funzione per applicare la sliding window sui dati di train
 #prende in ingresso la lista di dizionari con TraceId e TraceData, la lunghezza della finestra, l'overlap (passo della finestra), e il numero di canali (feature)
@@ -54,6 +55,62 @@ def apply_sliding_window(new_dataset_labeled, sliding_window_length, sliding_win
 
 def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step):
     df = pd.read_csv(file_path)
+    logger.debug(f"sto leggendo il file csv: {file_path}")
+    #logger.debug("Colonne nel dataset:", df.columns.tolist())
+
+    kid_ids = df['kid_id'].unique() # Prendo gli id dei bambini e li metto in una lista
+    print(">>> Kid_ids:", kid_ids)
+    X, Y, = [], [] 
+
+    kid_id_action_count = {} # Dizionario per tenere traccia del numero di finestre per ogni kid
+
+    for kid_id in kid_ids:
+        X_kid = df[df['kid_id'] == kid_id].drop(columns=['Timestamp', 'Mag_X', 'Mag_Y', 'Mag_Z','Date_time', 'action', 'action_id', 'G',
+                              'communication', 'social_interaction', 'restricted_repetitive_behaviour',
+                              'ados_total_score', 'I', 'E', 'toy_id','kid_id']).to_numpy() #
+        Y_kid = df[df['kid_id'] == kid_id]['action_id'].to_numpy() #
+
+        #stampa di debug per vedere quanti dati ho per ogni kid
+        logger.info(f"Kid_id: {kid_id}, X_kid shape: {X_kid.shape}, Y_kid shape: {Y_kid.shape}")
+
+        # Applicazione della sliding window
+        X_windows = data_processing.sliding_window(X_kid, ws=(sliding_window_length, X_kid.shape[1]), ss=(sliding_window_step, X_kid.shape[1]), min_pad_samples=30, extreme_pad_samples=10)
+        #prendo la prima etichetta non nulla di ogni finestra
+        Y_windows_full = data_processing.sliding_window(Y_kid.reshape(-1, 1), ws=(sliding_window_length, 1), ss=(sliding_window_step, 1), min_pad_samples=30, extreme_pad_samples=10)
+        Y_windows = np.asarray([next(value for value in reversed(window) if value != 0) for window in Y_windows_full])  # Prende la prima etichetta non nulla di ogni finestra
+
+        
+        logger.info(f"X_windows shape before reshape: {X_windows.shape}")
+        logger.info(f"Y_windows shape: {Y_windows.shape}")
+        # Reshape per Conv1D
+        #X_windows = X_windows.reshape((-1, sliding_window_length, nb_sensor_channels))
+
+
+
+        X.append(X_windows)
+        Y.append(Y_windows)
+
+
+        kid_id_action_count[int(kid_id)] = len(Y_windows) # Salva il numero di finestre per ogni kid
+
+        #stampo il numero di finestre che ha ogni azione e stampo quali azioni per ogni kid
+        for action_id in np.unique(Y_windows):
+            action_count = len(Y_windows[Y_windows == action_id])
+            logger.info(f"Kid_id: {kid_id}, Action_id: {action_id}, Action_count: {action_count}")
+    
+    logger.debug(f"Conteggio finale di finestre per ogni bambino per l'azione {action_id}: {kid_id_action_count}")
+    # Concateno le finestre di tutti i bambini
+    X_all = np.concatenate(X, axis=0)  # Concateno le finestre per X per tutti i bambini
+    Y_all = np.concatenate(Y, axis=0)  # Concateno le finestre per Y per tutti i bambini
+
+
+    
+    return X_all, Y_all, kid_id_action_count
+
+
+
+def old_process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step):
+    df = pd.read_csv(file_path)
     print("Colonne nel dataset:", df.columns.tolist())
     
     # Rimozione delle colonne non necessarie
@@ -70,7 +127,7 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
     print("Shape di Y_data:", Y_data.shape)
     
     # Applicazione della sliding window
-    X_windows = data_processing.sliding_window(X_data, ws=(sliding_window_length, X_data.shape[1]),
+    X_windows = data_processing.old_sliding_window(X_data, ws=(sliding_window_length, X_data.shape[1]),
                                ss=(sliding_window_step, X_data.shape[1]))
     Y_windows_full = data_processing.sliding_window(Y_data.reshape(-1, 1), ws=(sliding_window_length, 1), ss=(sliding_window_step, 1))
     

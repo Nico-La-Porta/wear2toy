@@ -13,12 +13,19 @@ import train
 import train_with_cm
 import matplotlib.pyplot as plt
 
+
+import neptune
+
 #definisco il path da cui leggere i .csv
 
 path='C:\codes\HumanActivityRecognition\data\pdd_data'
 print(path)
 
-
+#avvio neptune e lo connetto al mio account , poi creo un run (esperimento)
+run= neptune.init_run(
+    project="carolina/first-example", #nome del progetto
+    api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiIwOGNhNjk1Zi02ZDI1LTQ4ZTMtOWJlMi0yOTE1ZDA3NGMzNzcifQ==", #token di autenticazione
+)
 
 
 
@@ -66,7 +73,7 @@ for action_id in df_ball['action_id'].unique():
 #definisco i parametri
 nb_sensor_channels = 9
 sliding_window_length = 100
-sliding_window_step = 25
+sliding_window_step = 50
 
 #ora applico la funzione sliding window (che mi da come output x_window e y_window) a tutti i .csv relativi al toy palla
 #e poi concateno tutto in un unica x_train, y_train
@@ -74,11 +81,12 @@ sliding_window_step = 25
 X= []
 Y= []
 
+
 for file in os.listdir(path):
     if file.endswith('.csv') and file.split('_')[1] == 'ball':
         file_path = os.path.join(path, file)
         print(file_path)
-        X_windows, Y_windows = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
+        X_windows, Y_windows = sliding_window_on_data.old_process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
         X.append(X_windows)
         Y.append(Y_windows)
 
@@ -230,6 +238,10 @@ def objective(trial):
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
     batch_size = trial.suggest_categorical('batch_size', [4, 8, 12])
 
+    #loggo gli iperparametri su Neptune
+    run["parameters/lr"] = lr
+    run["parameters/batch_size"] = batch_size
+
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True, sampler=train_sampler, collate_fn=collate_fn)
@@ -259,15 +271,22 @@ def objective(trial):
     # Esegui l'allenamento
     best_f1_score = train.train(model, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr, f1_average="weighted")
 
+    #loggo il risultato su neptune
+    run["metrics/best_f1_score"] = best_f1_score
     return best_f1_score
 
 # Creazione studio Optuna ottimizza, nel senso di minimizzare la loss in 100 prove
 study = optuna.create_study(direction='maximize')
 study.optimize(objective, n_trials=100)
 
+# Loggo la migliore configurazione
+run["best_parameters"] = study.best_params
+run["best_f1_score"] = study.best_value
+
 print("Best hyperparameters: ", study.best_params)
 print("Highest F1-score: ", study.best_value)
 
+run.stop()
 
 #salvo i best hyperparameters
 best_hyperparameters = study.best_params
@@ -287,7 +306,7 @@ best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_b
 model = DeepConvLSTM()
 
         # Rimuovi la testa originale, in modo da non caricare i pesi associati
-model.load_state_dict(torch.load('C:\codes\HumanActivityRecognition\models\best_model_dl_without_sampler.pth'), strict=False)
+model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_without_sampler.pth'), strict=False)
 
     # Ora sostituisci la testa del modello con la nuova dimensione di classi (4)
 num_ftrs = model.fc.in_features
