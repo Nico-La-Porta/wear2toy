@@ -10,7 +10,7 @@ import os
 
 train_on_gpu=check_gpu.check_gpu_availability()
 
-class EarlyStopper:
+"""class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
         self.patience = patience
         self.min_delta = min_delta
@@ -25,11 +25,11 @@ class EarlyStopper:
             self.counter += 1
             if self.counter >= self.patience:
                 return True
-        return False
+        return False"""
 
 
 
-"""class EarlyStopper:
+class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
         self.patience = patience
         self.min_delta = min_delta
@@ -44,7 +44,7 @@ class EarlyStopper:
             self.counter += 1  # Inizia a contare quando l'F1-score non migliora
             if self.counter >= self.patience:  # Se non migliora per 'patience' epoche
                 return True  # Fermati
-        return False"""
+        return False
 
 
 def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, patience=7, f1_average='macro'):
@@ -122,14 +122,14 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
         if current_f1score > best_f1score:
             best_f1score = current_f1score
         
-        if early_stopper.early_stop(np.mean(val_losses)):
-            print("Early stopping triggered")
-            break
+        #if early_stopper.early_stop(np.mean(val_losses)):
+            #print("Early stopping triggered")
+            #break"""
 
         # Early stopping basato sull'F1-score
-        #if early_stopper.early_stop(current_f1score):
-            #net.eval()
-            #break""
+        if early_stopper.early_stop(current_f1score):
+            net.eval()
+            break
         
     return best_f1score
 

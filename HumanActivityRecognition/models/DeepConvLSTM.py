@@ -155,3 +155,14 @@ class DeepConvLSTM(nn.Module):
     
     def set_n_classes(self, n_classes):
         self.n_classes = n_classes 
+    
+    #per definire numero di sensor_channels
+    def set_nb_sensor_channels(self, nb_sensor_channels):
+        self.nb_sensor_channels = nb_sensor_channels
+    
+
+    #per definire sliding window lenght
+    def set_sliding_window_length(self, sliding_window_length):
+        self.sliding_window_length = sliding_window_length
+
+

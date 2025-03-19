@@ -13,6 +13,7 @@ import train
 import torch
 import train_with_cm
 import matplotlib.pyplot as plt
+from utils.log_config import logger
 #definisco il path da cui leggere i .csv
 
 path='C:\codes\HumanActivityRecognition\data\pdd_data'
@@ -46,6 +47,7 @@ else:
 
     kid_elep=[] #bambini prima del filtro
     kid_elep_no_null=[] #bambini dopo il filtro
+    df_list_elep=[]
 
     for file in matching_files:
         print("Processing file:", file)
@@ -62,20 +64,22 @@ else:
         print("Toy counts:\n", df['toy_id'].value_counts())
         print("="*50)  # Separatore tra i file
 
-    # Stampa gli utenti prima e dopo il filtraggio
-    print("Users before filtering:", kid_elep)
-    print("Users after filtering:", kid_elep_no_null)
+    # mi stampo gli utenti prima di fare il merge e dopo il merge
+    logger.info(f"Numero di utenti che hanno fatto almeno un azione: {len(kid_elep_no_null)/len(kid_elep)}")
 
-        # Creazione di un dataframe unificato per tutti i file che iniziano con BE, WE, GE, ecc.
-    df_elep_all = []  # Lista per contenere i dataframe filtrati
+
 
     for file in matching_files:
+        if not file.endswith('.csv'):
+            continue
+        
+        #leggo solo i file che dopo l'undescore ha BE*.csv
         df_temp = pd.read_csv(file)
         df_temp = df_temp[df_temp['action_id'] != 0]  # Mantieni solo righe con attività non nulla
-        df_elep_all.append(df_temp)
+        df_list_elep.append(df_temp)
 
     # Unisci tutti i dataframe
-    df_elep = pd.concat(df_elep_all, ignore_index=True)
+    df_elep = pd.concat(df_list_elep)
 
     # Stampa informazioni sul dataframe finale
     print("Dimensioni del dataframe unificato con tutte le attività non nulle")
@@ -94,75 +98,53 @@ else:
 
 for action_id in df_elep['action_id'].unique():
     df_action = df_elep[df_elep["action_id"] == action_id] #filtro il dataframe in base all'attività
-    print(f"Dimensioni del dataframe df_elep_action_{action_id}")
-    print(df_action.shape) #stampo le dimensioni del dataframe
-    print(df_action.columns) #stampo le colonne del dataframe
-    print(df_action['action'].value_counts()) #stampo il conteggio delle attività
+    logger.debug(f"Dimensioni del dataframe df_elep_action_{action_id} - {df_action.shape}") #log delle dimensioni del dataframe
+    logger.info(f"Conteggio delle attività per df_elep_action_{action_id}") #log del conteggio delle attività
     #salvo il dataframe
     df_action.to_csv(os.path.join(path,f'df_elep_action_{action_id}.csv'),index=False) #index=False per non salvare l'indice
-    print(f"Salvato il dataframe df_elep_action_{action_id}.csv")
+    logger.debug(f"Salvato il dataframe df_elep_action_{action_id}.csv")
 
 
 #applico sliding window con la funzion process_csv
 #definisco i parametri
-nb_sensor_channels = 13
+nb_sensor_channels = 9
 sliding_window_length = 100
-sliding_window_step = 20
+sliding_window_step = 50
 
 #ora applico la funzione sliding window (che mi da come output x_window e y_window) a tutti i .csv relativi al toy palla
 #e poi concateno tutto in un unica x_train, y_train
 
 X= []
 Y= []
+kid_action_counts={}
+for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.split('_')[1] == 'elep']:
+    file_path = os.path.join(path, action_file)
+    action = action_file.split('_')[-1].split('.')[0]
 
-for file in os.listdir(path):
-    if file.endswith('.csv') and file.split('_')[1] == 'elep':
-        file_path = os.path.join(path, file)
-        print(file_path)
-        X_windows, Y_windows = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
-        X.append(X_windows)
-        Y.append(Y_windows)
+    X_windows, Y_windows, kid_id_action_dict = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
 
-# Concatenate all the windows into a single array
+    X.append(X_windows)
+    Y.append(Y_windows)
+
+
+    logger.info(f"Numero  totale di finestre per l'azione {action}:{len(X_windows)}")
+    kid_action_counts[f"elep_action_{action}"] = kid_id_action_dict #aggiungo il dizionario al dizionario principale per tenere traccia del numero di finestre per ogni bambino per ogni azione, ogni elep_action è una chiave e il valore è un dizionario con il numero di finestre per ogni bambino
+    logger.info(f"Contenuto finale di kid_action_counts: {kid_action_counts[f'elep_action_{action}']}") #per vedere quante finestre per ogni azione e per ogni bambino sono state elaborate
+
+
+# Concateno tutti i dati in un unico array per X e Y
 X = np.concatenate(X, axis=0)
 Y = np.concatenate(Y, axis=0)
 
-#NUMERO TOTALE DI FINESTRE PER LA PALLA
-print("Numero totale di finestre per il giocattolo elep:")
-print(X.shape)
-print(Y.shape)
 
-#verifca
-print(X)
-print(Y)
-
-
-# estraggo gli id dei bambini per vedere quanti ne ho
-kid_ids = X[:, :, -2]  # Assuming kid_id is the third last column
-
-# Get unique kid_ids
-unique_kid_ids = np.unique(kid_ids)
-print("Unique kid_ids in X:")
-print(unique_kid_ids)
-
-
-
-#Splitto il dataset in base al numero di azioni eseguite per avere congruenza temporale tra train e test e per 
-#cercare di bilanciare le finestre in train e test
-
-#filtro per ogni
-#filtro per contare il numero di finestre per ogni azione
-unique_actions, counts = np.unique(Y, return_counts=True)
-print(unique_actions)
-action_counts = dict(zip(unique_actions, counts))
-
-print("Numero di finestre per ogni azione:")
-for action, count in action_counts.items():
-    print(f"Azione {action}: {count} finestre")
-
+# Stampo le dimensioni di X e Y
+logger.info(f"Dimensioni di X finale: {X.shape}")
+logger.info(f"Dimensioni di Y finale: {Y.shape}")
 
 #split ratio  (70% nel train e 30% nel test)
 split_ratio = 0.7
+
+
 
 # Split the data
 X_train = []
@@ -170,7 +152,7 @@ Y_train = []
 X_test = []
 Y_test = []
 
-for action in unique_actions:
+"""for action in unique_actions:
 
     #trovo gli indici delle finestre corrispondenti a ciascuna azione
     action_indices = np.where(Y == action)[0]
@@ -328,3 +310,4 @@ print(f"Best model trained with the optimal hyperparameters and saved at {model_
 
 
 
+"""
