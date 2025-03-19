@@ -23,11 +23,7 @@ class HARDataset(Dataset):
         """
         self.data = torch.tensor(data, dtype=torch.float32)
         self.labels = torch.tensor(labels, dtype=torch.long)
-<<<<<<< HEAD
         self.classes=class_names if class_names is not None else [str(i) for i in range(len(np.unique(labels)))]
-=======
-        self.classes = class_names if class_names is not None else [str(i) for i in range(len(set(labels)))]
->>>>>>> 9acecd0286fac7fff9ecb72894a3113d6e4a5096
 
     def __len__(self):
         return len(self.labels)
