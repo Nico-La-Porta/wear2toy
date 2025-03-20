@@ -5,7 +5,7 @@ from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 import sliding_window_on_data
 from torch.utils.data import DataLoader
 import glob
-
+import torch.nn as nn
 from models.DeepConvLSTM import DeepConvLSTM, HARDataset 
 import optuna
 import optuna.visualization as vis
@@ -141,7 +141,11 @@ Y_train = []
 X_test = []
 Y_test = []
 
-"""for action in unique_actions:
+# Trova tutte le azioni uniche presenti nei dati
+unique_actions = np.unique(Y)
+print("Azioni uniche:", unique_actions)
+
+for action in unique_actions:
 
     #trovo gli indici delle finestre corrispondenti a ciascuna azione
     action_indices = np.where(Y == action)[0]
@@ -285,7 +289,7 @@ print("Highest F1-score: ", study.best_value)
 best_hyperparameters = study.best_params
 best_hyperparameters['best_f1_score'] = study.best_value
 best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_inference_sampler_macro.csv'), index=False)
+best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_inference_without_sampler_macro.csv'), index=False)
 
 
 
@@ -339,4 +343,4 @@ test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False
 
 
 best_f1_score = train_with_cm.train(model, train_loader, test_loader, epochs=100,batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_inference_without_sampler_macro", patience=7, f1_average='macro')
-print(f"Best F1 score: {best_f1_score}")"""
+print(f"Best F1 score: {best_f1_score}")
