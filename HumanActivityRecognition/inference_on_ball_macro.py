@@ -244,7 +244,7 @@ print("Tipo di test_dataset:", type(test_dataset))
 def objective(trial):
     # Definisci gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    batch_size = trial.suggest_categorical('batch_size', [4, 8, 12])
+    batch_size = trial.suggest_categorical('batch_size', [2,4,8])
 
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 
@@ -255,7 +255,7 @@ def objective(trial):
     model = DeepConvLSTM()
 
         # Rimuovi la testa originale, in modo da non caricare i pesi associati
-    model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_without_sampler.pth'), strict=False)
+    model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\HumanActivityRecognition\best_model_dl.pth'), strict=False)
 
 
     # Ora sostituisco la testa del modello con la nuova dimensione di classi (4)
@@ -314,7 +314,7 @@ print(f"Grafico salvato in figures /{file_name}")
 model = DeepConvLSTM()
 
         # Rimuovi la testa originale, in modo da non caricare i pesi associati
-model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_without_sampler.pth'), strict=False)
+model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\HumanActivityRecognition\best_model_dl.pth'), strict=False)
 
     # Ora sostituisci la testa del modello con la nuova dimensione di classi (4)
 num_ftrs = model.fc.in_features
