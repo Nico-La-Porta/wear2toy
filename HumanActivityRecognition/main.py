@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 import pandas as pd
-from data_analysis import describe_data
+import data_analysis
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 
 
@@ -18,7 +18,7 @@ from run_config import SLIDING_WINDOW_STEP
 import sliding_window_on_data
 from torch.utils.data import DataLoader
 from models.DeepConvLSTM import DeepConvLSTM, HARDataset
-
+from sklearn.preprocessing import StandardScaler
 
 from utils import init_weights
 import train
@@ -37,18 +37,82 @@ datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
 datasetTracesTest = data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
 dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
 dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
-#Concateno tutte le tracce di train e test
-X_train_labeled = np.vstack([trace['TraceData'][:, :-1] for trace in dataset_train_labled])
-X_test_labeled = np.vstack([trace['TraceData'][:, :-1] for trace in dataset_test_labled])
 
-#Caratteristich descrittive 
-describe_data(X_train_labeled)
-describe_data(X_test_labeled)
+grouped_activity_data = data_preprocessing.combine_and_group(dataset_train_labled, dataset_test_labled)
+
+# Visualizzo le attività e il numero di tracce per attività
+for activity, traces in grouped_activity_data.items():
+    logger.info(f"Attività {activity} con {len(traces)} tracce")
+    combined_data = np.concatenate(traces, axis=0)  # Unisco tutte le tracce per l'attività
+    # Applico il test KS e traccio l'istogramma per ciascuna caratteristica
+    for feature_idx in range(combined_data.shape[1]):
+        feature_data = combined_data[:, feature_idx]  # Dati per una singola caratteristica
+
+    #calcolo istogramma
+        #plt.figure(figsize=(8, 6))
+        #plt.hist(feature_data.flatten(), bins='auto', color='blue', alpha=0.7, label=f'Activity {activity}')
+        #plt.title(f'Istogramma dei dati per l\'attività {activity} e la caratteristica {feature_idx}')
+        #plt.xlabel('Valore dei dati')
+        #plt.ylabel('Frequenza')
+        #plt.legend(loc='best')
+
+        #creo una sottocartella in FIGURES
+        #if not os.path.exists(os.path.join(FIGURES_DIR, f"activity_{activity}")): # Se non esiste la cartella, la creo
+            #os.makedirs(os.path.join(FIGURES_DIR, f"activity_{activity}")) # Creo la cartella
+        #salvo l'istogramma
+        #plt.savefig(os.path.join(FIGURES_DIR, f"activity_{activity}", f"histogram_feature_{feature_idx}.png")) # Salvo l'istogramma IN FIGURES/activity_{activity}
+        #chiudo il plot
+        #plt.close()
+
+        # Eseguo il KS test
+        stat, p_value = data_analysis.kstest(feature_data.flatten(), 'norm')  # KS test
+        logger.info(f'Attività {activity} - p-value per il KS test per la caratteristica {feature_idx}: {p_value}')
+
+        if p_value < 0.05:
+            logger.info(f"I dati per l'attività {activity} e la caratteristica {feature_idx} non seguono una distribuzione normale (rifiutata dal KS test).")
+
+        else:
+            logger.info(f"I dati per l'attività {activity} e la caratteristica {feature_idx} seguono una distribuzione normale (non rifiutata dal KS test).")
+
+
+
+
+
+
+
+
+#Calcolo e salvo le statistiche descrittive
+stats = data_analysis.compute_descriptive_statistics(grouped_activity_data)
+
 
 X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(dataset_train_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
-#Concateno tutte 
-X_train_labeled = np.vstack([trace['TraceData'][:, :-1] for trace in dataset_train_labled])
+
+
+# Creo l'oggetto StandardScaler
+scaler = StandardScaler()
+
+# Reshape dei dati per normalizzare su tutte le dimensioni insieme
+X_Train_reshaped = X_Train.reshape(-1, X_Train.shape[2])  # (numfinestre * ws, channels)
+X_Test_reshaped = X_Test.reshape(-1, X_Test.shape[2])  # (numfinestre * ws, channels)
+
+# Normalizzo i dati di train e test
+X_Train_scaled_reshaped = scaler.fit_transform(X_Train_reshaped)  # Normalizzo i dati di train
+X_Test_scaled_reshaped = scaler.transform(X_Test_reshaped)  # Normalizzo i dati di test
+
+# Reshape indietro per tornare alla forma originale
+X_Train_scaled = X_Train_scaled_reshaped.reshape(X_Train.shape)  # (numfinestre, ws, channels)
+X_Test_scaled = X_Test_scaled_reshaped.reshape(X_Test.shape)  # (numfinestre, ws, channels)
+
+logger.debug(f"Dimensioni X_Train_scaled: {X_Train_scaled.shape}")
+logger.debug(f"Dimensioni X_Test_scaled: {X_Test_scaled.shape}")
+
+
+
+logger.info("Dati normalizzati")
+logger.debug(f"Media: {scaler.mean_}")
+logger.debug(f"Deviazione standard: {scaler.scale_}")
+
 
 
 # Creazione dataset

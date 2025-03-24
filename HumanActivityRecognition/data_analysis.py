@@ -12,7 +12,10 @@ from run_config import SLIDING_WINDOW_STEP
 import sliding_window_on_data
 from app_config import FIGURES_DIR
 import json
+from typing import Dict, List, Any
 from utils.log_config import logger
+
+from scipy.stats import kstest, norm
 
 # Funzione per calcolare e rappresentare la distribuzione delle etichette
 def plot_label_distribution(dataset,dataset_type="train",save_dir="figures"):
@@ -105,43 +108,74 @@ def plot_window_distribution(X, Y,dataset_type="train",save_dir="figures"):
     logger.info(f"File JSON salvato in: {json_file_path}")
 
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
-def describe_data(X_train):
-    #converto in dataframe 
-    X_train_df = pd.DataFrame(X_train)
+
+def compute_descriptive_statistics(grouped_data: Dict[int, List[np.ndarray]]) -> Dict[int, Dict[str, np.ndarray]]:
+    """
+    Calcola statistiche descrittive per ogni attività.
+
+    :param grouped_data: Dizionario con attività come chiavi e liste di tracce come valori.
+    :return: Dizionario con attività come chiavi e un dizionario di statistiche come valori.
+    """
+    stats = {}
+
+    for activity, traces in grouped_data.items():
+        logger.info(f"Calcolo statistiche descrittive per l'attività {activity} con {len(traces)} tracce")
+        all_data = np.vstack(traces)  # Unisco tutte le tracce in un unico array per analisi
+
+        # Escludo la prima colonna (timestamp)
+        data_without_timestamp = all_data[:, 1:]  # Rimuovo la prima colonna (timestamp)
+        # Calcolo acc_norm (radice della somma dei quadrati delle prime tre colonne)
+        acc_norm = np.sqrt(np.sum(data_without_timestamp [:, :3] ** 2, axis=1))
+
+        # Statistiche descrittive
+        stats[activity] = {
+            "mean": np.mean(data_without_timestamp, axis=0).tolist(),
+            "std": np.std(data_without_timestamp, axis=0).tolist(),
+            "min": np.min(data_without_timestamp , axis=0).tolist(),
+            "max": np.max(data_without_timestamp , axis=0).tolist(),
+            "acc_norm_mean": float(np.mean(acc_norm)), 
+            "acc_norm_std": float(np.std(acc_norm)), 
+            "acc_norm_min": float(np.min(acc_norm)),
+            "acc_norm_max": float(np.max(acc_norm))
+        }
+        output_path = os.path.join(FIGURES_DIR, f"stats_activity_{activity}.json")
+        with open(output_path, "w") as f:
+            json.dump(stats[activity], f, indent=4)
+        logger.info(f"Statistiche salvate in: {output_path}")
+
+    return stats
+
+
+# Funzione per tracciare un istogramma e fare il test KS
+def plot_histogram_and_ks_test(data: np.ndarray, activity: int):
+    """
+    Traccia un istogramma e verifica se i dati seguono una distribuzione normale usando il KS test.
     
-    # Statistiche descrittive
-    logger.info("Statistiche descrittive:")
-    logger.info(X_train_df.describe())  # Media, std, min, max, quartili
-    
-    # Statistiche specifiche per ogni colonna
-    logger.info("\nStatistica per ciascuna colonna:")
-
-    for i in range(X_train.shape[1]):
-        logger.info(f"Feature {i+1}:")
-        logger.info(f"  - Media: {np.mean(X_train[:, i])}")
-        logger.info(f"  - Deviazione standard: {np.std(X_train[:, i])}")
-        logger.info(f"  - Minimo: {np.min(X_train[:, i])}")
-        logger.info(f"  - Massimo: {np.max(X_train[:, i])}")
-        logger.info(f"  - Range: {np.max(X_train[:, i]) - np.min(X_train[:, i])}")
-        logger.info(f"  - Mediana: {np.median(X_train[:, i])}")
-        
-
-    # Visualizzazione: istogrammi per ogni colonna
-    logger.info("Visualizzazione: Istogrammi delle caratteristiche")
-    plt.figure(figsize=(15, 10))
-    for i in range(X_train.shape[1]):
-        plt.subplot(3, 3, i + 1)  # 3x3 grid for the plots
-        plt.hist(X_train[:, i], bins=20, alpha=0.7, color='blue')
-        plt.title(f"Feature {i+1}")
-        plt.xlabel('Valore')
-        plt.ylabel('Frequenza')
-    plt.tight_layout()
+    :param data: Dati della traccia (un array NumPy).
+    :param activity: Attività per cui si sta facendo il test.
+    """
+    # Traccio l'istogramma dei dati
+    plt.figure(figsize=(8, 6))
+    plt.hist(data.flatten(), bins='auto', color='blue', alpha=0.7, label=f'Activity {activity}')
+    plt.title(f'Histogram of Data for Activity {activity}')
+    plt.xlabel('Data Value')
+    plt.ylabel('Frequency')
+    plt.legend(loc='best')
     plt.show()
 
+    # Eseguo il KS test confrontando con la distribuzione normale
+    # Calcolo la media e la deviazione standard dei dati per adattarli alla normale
+    mu, std = norm.fit(data.flatten())
+    
+    # Eseguo il KS test
+    stat, p_value = kstest(data.flatten(), 'norm', args=(mu, std))
+    print(f'Activity {activity} - p-value for KS test: {p_value}')
+
+    if p_value < 0.05:
+        print(f"Data for Activity {activity} do not follow a normal distribution (rejected by KS test).")
+    else:
+        print(f"Data for Activity {activity} follow a normal distribution (not rejected by KS test).")
 
 if __name__ == "__main__":
     # Esempio di utilizzo delle funzioni

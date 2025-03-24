@@ -1,10 +1,14 @@
 import os
 import numpy as np
 from utils.log_config import logger
+from typing import List, Dict, Any
+
+
 #funzioni per:
     # 1)restituire una lista di file con una specifica estensione
     # 2)Caricare annotazioni e segnali da file .npz
-    # 3)Costruire dataset a partire da file .npz (annotazioni e segnali) 
+    # 3)Costruire dataset a partire da file .npz (annotazioni e segnali)
+    # 4) Raggruppare dati per attività  
 
 def get_files_in_directory(path, extension):
 
@@ -76,6 +80,51 @@ def add_labels_to_dataset(dataset):
         new_dataset_labeled.append(new_trace)
 
     return new_dataset_labeled
+
+
+
+
+# Funzione per raggruppare il dataset per attività
+def group_by_activity(dataset: List[Dict[str, Any]]) -> Dict[int, List[np.ndarray]]:
+    """
+    Raggruppa il dataset per attività (activity).
+    
+    :param dataset: Lista di dizionari, ciascuno contenente 'TraceData' (un array NumPy) 
+    :return: Dizionario con attività come chiavi, e tracce di dati come valori
+            (una lista di arrays per ciascuna attività).
+    """
+    activity_groups = {}
+
+    # Raggruppo le tracce per attività
+    for trace in dataset:
+        # Estraggo l'attività dalla colonna 'TraceData' (ultima colonna)
+        activity = trace['TraceData'][:, -1].astype(int)[0]  
+
+        if activity not in activity_groups:
+            activity_groups[activity] = []
+
+        # Aggiungo i dati della traccia al gruppo corrispondente
+        activity_groups[activity].append(trace['TraceData'][:, :-1])  # Rimuovo l'activity dalla traccia
+
+    return activity_groups
+
+# Funzione per combinare train e test e raggruppare per attività
+def combine_and_group(train_data: List[Dict[str, Any]], test_data: List[Dict[str, Any]]) -> Dict[int, List[np.ndarray]]:
+    """
+    Combina i dataset di train e test e raggruppa per attività.
+    
+    :param train_data: Dataset di train (lista di dizionari).
+    :param test_data: Dataset di test (lista di dizionari).
+    :return: Dizionario con attività come chiavi e tracce di dati come valori
+            (una lista di arrays per ciascuna attività).
+    """
+    # Combino i dataset di train e test
+    combined_dataset = train_data + test_data
+    
+    # Raggruppo per attività
+    return group_by_activity(combined_dataset)
+
+
 
 
 """def main():
