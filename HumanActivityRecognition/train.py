@@ -4,9 +4,9 @@ import numpy as np
 from sklearn import metrics
 from sklearn.utils import shuffle
 from utils import check_gpu 
-from utils import plot
 from app_config import MODELS_DIR
 import os
+from utils.log_config import logger
 
 train_on_gpu=check_gpu.check_gpu_availability()
 
@@ -110,11 +110,12 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
         val_accuracy_history.append(accuracy / len(test_loader))
         val_f1score_history.append(f1score / len(test_loader))
 
-        print(f"Epoch: {e+1}/{epochs}... "
-              f"Train Loss: {np.mean(train_losses):.4f}... "
-              f"Val Loss: {np.mean(val_losses):.4f}... "
-              f"Val Acc: {accuracy / len(test_loader):.4f}... "
-              f"F1-Score: {f1score / len(test_loader):.4f}")
+        logger.info(f"Epoch: {e+1}/{epochs}... "
+                f"Train Loss: {np.mean(train_losses):.4f}... "
+                f"Val Loss: {np.mean(val_losses):.4f}... "
+                f"Val Acc: {accuracy / len(test_loader):.4f}... "
+                f"F1-Score: {f1score / len(test_loader):.4f}")
+
         
         # Aggiorna il miglior F1-score
         current_f1score = f1score / len(test_loader)

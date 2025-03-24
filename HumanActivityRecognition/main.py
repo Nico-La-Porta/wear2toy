@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 import pandas as pd
+from data_analysis import describe_data
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 
 
@@ -36,8 +37,19 @@ datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
 datasetTracesTest = data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
 dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
 dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
+#Concateno tutte le tracce di train e test
+X_train_labeled = np.vstack([trace['TraceData'][:, :-1] for trace in dataset_train_labled])
+X_test_labeled = np.vstack([trace['TraceData'][:, :-1] for trace in dataset_test_labled])
+
+#Caratteristich descrittive 
+describe_data(X_train_labeled)
+describe_data(X_test_labeled)
+
 X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(dataset_train_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
+#Concateno tutte 
+X_train_labeled = np.vstack([trace['TraceData'][:, :-1] for trace in dataset_train_labled])
+
 
 # Creazione dataset
 train_dataset = HARDataset(X_Train, Y_Train)

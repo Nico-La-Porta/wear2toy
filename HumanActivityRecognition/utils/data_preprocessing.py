@@ -1,6 +1,6 @@
 import os
 import numpy as np
-
+from utils.log_config import logger
 #funzioni per:
     # 1)restituire una lista di file con una specifica estensione
     # 2)Caricare annotazioni e segnali da file .npz
@@ -10,6 +10,7 @@ def get_files_in_directory(path, extension):
 
     return [f for f in os.listdir(path) if f.endswith(extension)]
 
+
 def load_trace_data(path, annotations_file, signals_file):
 
     annotations_data = np.load(os.path.join(path, annotations_file))
@@ -17,10 +18,9 @@ def load_trace_data(path, annotations_file, signals_file):
     annotations = annotations_data['annotations']
     signals = signals_data['signals']
     
-    print(f"Loaded annotations and signals for TraceID: {annotations_file.replace('_ann.npz', '')}")
-    print(f"Annotations shape: {annotations.shape}")
-    print(f"Signals shape: {signals.shape}")
-    
+    logger.debug(f"Loaded annotations and signals for TraceID: {annotations_file.replace('_ann.npz', '')}")
+    logger.debug(f"Annotations shape: {annotations.shape}")
+    logger.debug(f"Signals shape: {signals.shape}") 
     return annotations, signals
 
 def build_dataset(path):
@@ -50,7 +50,7 @@ def build_dataset(path):
             }
             dataset_traces.append(trace)
         else:
-            print(f"Missing signals file for TraceID: {traceID}")
+            logger.warning(f"Missing signals file for TraceID: {traceID}")
     
     return dataset_traces
 

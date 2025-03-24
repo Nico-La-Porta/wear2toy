@@ -12,7 +12,7 @@ from run_config import SLIDING_WINDOW_STEP
 import sliding_window_on_data
 from app_config import FIGURES_DIR
 import json
-
+from utils.log_config import logger
 
 # Funzione per calcolare e rappresentare la distribuzione delle etichette
 def plot_label_distribution(dataset,dataset_type="train",save_dir="figures"):
@@ -48,16 +48,17 @@ def plot_label_distribution(dataset,dataset_type="train",save_dir="figures"):
     plt.savefig(file_path)
     plt.close()  # Chiude la figura per liberare la memoria
 
-    print(f"Grafico salvato in: {file_path}")
+    logger.info(f"Grafico salvato in: {file_path}")
 
 
    #Visualizza la distribuzione delle finestre in base alle etichette.
 def plot_window_distribution(X, Y,dataset_type="train",save_dir="figures"):
     num_windows = len(Y)
     # Controllo delle dimensioni
-    print(f"Numero totale di finestre: {num_windows}")
-    print(f"Forma delle finestre (X): {X.shape}")
-    print(f"Numero di etichette uniche: {len(np.unique(Y))}")
+    logger.info(f"Numero totale di finestre: {num_windows}")
+    logger.info(f"Forma delle finestre (X): {X.shape}")
+    logger.info(f"Numero di etichette uniche: {len(np.unique(Y))}")
+
 
     # Ottieni tutte le etichette uniche
     unique_labels,counts = np.unique(Y,return_counts=True)
@@ -85,7 +86,7 @@ def plot_window_distribution(X, Y,dataset_type="train",save_dir="figures"):
     plt.savefig(file_path)
     plt.close()  # Chiude la figura per liberare la memoria
 
-    print(f"Grafico salvato in: {file_path}")
+    logger.info(f"Grafico salvato in: {file_path}")
 
         # Salva il numero di finestre in un file JSON
     # Salva il numero di finestre in un file JSON
@@ -101,7 +102,45 @@ def plot_window_distribution(X, Y,dataset_type="train",save_dir="figures"):
     with open(json_file_path, 'w') as json_file:
         json.dump(json_data, json_file,indent=4)
 
-    print(f"Informazioni salvate in: {json_file_path}")
+    logger.info(f"File JSON salvato in: {json_file_path}")
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def describe_data(X_train):
+    #converto in dataframe 
+    X_train_df = pd.DataFrame(X_train)
+    
+    # Statistiche descrittive
+    logger.info("Statistiche descrittive:")
+    logger.info(X_train_df.describe())  # Media, std, min, max, quartili
+    
+    # Statistiche specifiche per ogni colonna
+    logger.info("\nStatistica per ciascuna colonna:")
+
+    for i in range(X_train.shape[1]):
+        logger.info(f"Feature {i+1}:")
+        logger.info(f"  - Media: {np.mean(X_train[:, i])}")
+        logger.info(f"  - Deviazione standard: {np.std(X_train[:, i])}")
+        logger.info(f"  - Minimo: {np.min(X_train[:, i])}")
+        logger.info(f"  - Massimo: {np.max(X_train[:, i])}")
+        logger.info(f"  - Range: {np.max(X_train[:, i]) - np.min(X_train[:, i])}")
+        logger.info(f"  - Mediana: {np.median(X_train[:, i])}")
+        
+
+    # Visualizzazione: istogrammi per ogni colonna
+    logger.info("Visualizzazione: Istogrammi delle caratteristiche")
+    plt.figure(figsize=(15, 10))
+    for i in range(X_train.shape[1]):
+        plt.subplot(3, 3, i + 1)  # 3x3 grid for the plots
+        plt.hist(X_train[:, i], bins=20, alpha=0.7, color='blue')
+        plt.title(f"Feature {i+1}")
+        plt.xlabel('Valore')
+        plt.ylabel('Frequenza')
+    plt.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":
