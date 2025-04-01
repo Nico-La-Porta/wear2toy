@@ -20,6 +20,14 @@ RUN pip install tqdm==4.67.1
 RUN pip install torch==2.5.1
 RUN pip install loguru==0.7.2
 RUN pip install optuna==4.1.0
+RUN pip install pandas==2.2.3
+RUN  pip install scipy==1.15.2
 
-# Set the working directory
-WORKDIR /app
+
+
+
+# Set the working directory: tutto il codice verrà copiato all'interno di /app nel container
+WORKDIR /app 
+
+# Copy your project files into the container
+COPY . /app

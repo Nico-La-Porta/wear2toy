@@ -1,9 +1,12 @@
 import os
 import numpy as np
+import json
 from utils.log_config import logger
 from typing import List, Dict, Any
-
-
+from scipy.stats import ks_1samp, norm
+from app_config import FIGURES_DIR
+from scipy import stats
+from sklearn.preprocessing import StandardScaler, RobustScaler
 #funzioni per:
     # 1)restituire una lista di file con una specifica estensione
     # 2)Caricare annotazioni e segnali da file .npz
@@ -22,9 +25,9 @@ def load_trace_data(path, annotations_file, signals_file):
     annotations = annotations_data['annotations']
     signals = signals_data['signals']
     
-    logger.debug(f"Loaded annotations and signals for TraceID: {annotations_file.replace('_ann.npz', '')}")
-    logger.debug(f"Annotations shape: {annotations.shape}")
-    logger.debug(f"Signals shape: {signals.shape}") 
+    #logger.debug(f"Loaded annotations and signals for TraceID: {annotations_file.replace('_ann.npz', '')}")
+    #logger.debug(f"Annotations shape: {annotations.shape}")
+    #logger.debug(f"Signals shape: {signals.shape}") 
     return annotations, signals
 
 def build_dataset(path):
@@ -124,6 +127,143 @@ def combine_and_group(train_data: List[Dict[str, Any]], test_data: List[Dict[str
     # Raggruppo per attività
     return group_by_activity(combined_dataset)
 
+
+
+# Funzione per salvare i risultati in file JSON
+def save_results_to_json(results, figures_dir):
+    if not os.path.exists(figures_dir):
+        os.makedirs(figures_dir)
+    for activity, activity_results in results.items():
+        file_path = os.path.join(figures_dir, f"Activity_{activity}_results.json")
+        with open(file_path, 'w') as f:
+            json.dump(activity_results, f, indent=4)
+
+
+# Funzione per eseguire il test di normalità e salvare i risultati
+def check_normality_and_save_by_activity(activity_data, figures_dir):
+    results = {}
+    for activity, data_list in activity_data.items():
+        combined_data = np.vstack(data_list) ## Combino i dati per l'attività
+        activity_results = {}
+        for feature_idx in range(combined_data.shape[1]):  # Itero su ogni canale (feature)
+            feature_data = combined_data[:, feature_idx] ## Dati per una singola caratteristica
+            mean = np.mean(feature_data)
+            std = np.std(feature_data)
+            ks_stat, ks_p = stats.kstest(feature_data, 'norm', args=(mean, std))
+            mean_val = mean
+            std_val = std
+            median_val = np.median(feature_data)
+            iqr_val = stats.iqr(feature_data)
+            activity_results[f"Channel_{feature_idx+1}"] = {
+                "KS_H": ks_stat,
+                "KS_p": ks_p,
+                "Mean": mean_val,
+                "Std": std_val,
+                "Median": median_val,
+                "IQR": iqr_val
+            }
+        results[activity] = activity_results
+    save_results_to_json(results, figures_dir)
+
+
+def apply_scalers_to_dataset(dataset, json_results, figures_dir):
+    """
+    Applica gli scaler ai dati già etichettati in base ai risultati del test di normalità.
+    
+    :param dataset: Dataset da scalare (lista di dizionari con 'TraceData' già etichettati).
+    :param json_results: Risultati del test di normalità per ogni attività (dal file JSON).
+    :param figures_dir: Directory dove sono salvati i risultati (per il salvataggio).
+    :return: Nuovo dataset con i dati scalati.
+    """
+    new_dataset = []  # Lista per il nuovo dataset scalato
+
+    for trace in dataset:
+        # Estraggo dati
+        trace_data = trace['TraceData']
+        
+        
+        activity = trace_data[0, -1].astype(int)  # Estraggo l'attività dalla prima riga, ultima colonna
+        
+        # Ottengo i risultati del test di normalità per questa attività dal JSON
+        activity_results = json_results.get(str(activity), {})
+        
+        # Creo una copia dei dati per applicare gli scalers
+        scaled_trace_data = np.copy(trace_data)
+        
+        # Applico lo scaler per ciascun canale esclusa l'ultima colonna (l'etichetta)
+        for feature_idx in range(trace_data.shape[1] - 1):  # Ignoro l'ultima colonna (activity)
+            channel_key = f"Channel_{feature_idx+1}"
+            ks_p_value = activity_results.get(channel_key, {}).get("KS_p")
+
+            ks_p_value = float(ks_p_value)
+            logger.info(f"p-value: {ks_p_value}")
+            if ks_p_value is None:
+                logger.warning(f"ATTENZIONE: Valore KS_p non trovato per Attività {activity}, Canale {channel_key}")
+                ks_p_value = 1.0  # Valore di default per evitare errori
+
+
+            # Se il p-value è maggiore di 0.05, applica StandardScaler, altrimenti RobustScaler
+            if ks_p_value > 0.05:
+                logger.info(f"Attività {activity}, Canale {channel_key}: p-value = {ks_p_value} (StandardScaler)")
+                scaler = StandardScaler()
+            else:
+                logger.info(f"Attività {activity}, Canale {channel_key}: p-value = {ks_p_value} (RobustScaler)")
+                scaler = RobustScaler()
+            
+            
+
+            # Applico lo scaler solo a questa colonna
+            # Reshape per fare il fit e trasformare la colonna in modo indipendente
+            scaled_trace_data[:, feature_idx] = scaler.fit_transform(trace_data[:, feature_idx].reshape(-1, 1)).flatten()
+        
+        # Aggiungo la traccia scalata al nuovo dataset
+        new_trace = trace.copy()
+        new_trace['TraceData'] = scaled_trace_data
+        new_dataset.append(new_trace)
+    
+    return new_dataset
+
+
+# Carica i risultati dal JSON (già calcolati e salvati in precedenza)
+def load_json_results(figures_dir):
+    results = {}
+    for filename in os.listdir(figures_dir):
+        if filename.endswith('_results.json'):
+            activity = filename.split('_')[1]
+            with open(os.path.join(figures_dir, filename), 'r') as f:
+                activity_results = json.load(f)
+                results[activity] = activity_results
+    return results
+
+
+
+
+# Controlli dopo lo scaling
+def check_scaled_data(original_dataset, scaled_dataset, dataset_name):
+    """Controlla se lo scaling è stato applicato correttamente su una traccia e una feature a caso,
+    mostrando la media e deviazione standard prima e dopo lo scaling."""
+    
+    num_traces = len(scaled_dataset)
+    random_trace_idx = np.random.randint(0, num_traces)  # Scelgo una traccia a caso
+    random_feature_idx = np.random.randint(0, scaled_dataset[random_trace_idx]['TraceData'].shape[1] - 1)  # Scelgo una feature a caso
+
+    logger.info(f"Controllo {dataset_name}: Trace {random_trace_idx}, Feature {random_feature_idx}")
+
+    original_values = original_dataset[random_trace_idx]['TraceData'][:, random_feature_idx]  # Valori originali
+    scaled_values = scaled_dataset[random_trace_idx]['TraceData'][:, random_feature_idx]  # Valori scalati
+
+    # Calcolo della media e deviazione standard prima e dopo lo scaling
+    original_mean = np.mean(original_values)
+    original_std = np.std(original_values)
+    scaled_mean = np.mean(scaled_values)
+    scaled_std = np.std(scaled_values)
+
+    # Log delle informazioni
+    logger.info(f"[PRIMA] {dataset_name} - Trace {random_trace_idx}, Feature {random_feature_idx}: {original_values[:5]}")
+    logger.info(f"Media PRIMA: {original_mean}, Deviazione Standard PRIMA: {original_std}")
+    
+    logger.info(f"[DOPO] {dataset_name} - Trace {random_trace_idx}, Feature {random_feature_idx}: {scaled_values[:5]}")
+    logger.info(f"Media DOPO: {scaled_mean}, Deviazione Standard DOPO: {scaled_std}")
 
 
 
