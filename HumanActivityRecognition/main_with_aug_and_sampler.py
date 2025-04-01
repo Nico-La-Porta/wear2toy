@@ -30,6 +30,7 @@ import matplotlib.pyplot as plt
 from utils.transformations import *
 from utils.transformations_utils import *
 from utils.log_config import logger
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn, create_weighted_sampler
 
 
 
@@ -38,7 +39,7 @@ from utils.log_config import logger
 init_weights.set_seed(42)
 
 # File per salvare i migliori iperparametri
-best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_aug.csv')
+best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_aug_and_sampler.csv')
     
 # Prepara i dati
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
@@ -84,6 +85,8 @@ train_dataset = HARDataset(X_Train_augmented, Y_Train_augmented)
 test_dataset = HARDataset(X_Test, Y_Test)
 
 
+train_sampler = create_weighted_sampler(Y_Train)
+
 # Controllo se esiste il file con i migliori iperparametri
 if os.path.exists(best_hyperparams_file):
     print("Caricamento migliori iperparametri da file CSV...")
@@ -92,68 +95,57 @@ if os.path.exists(best_hyperparams_file):
     best_batch_size = int(best_hyperparameters['batch_size'])  # Optuna salva i numeri interi come float
 else:
     print("Nessun file di iperparametri trovato. Avvio Optuna per l'ottimizzazione...")
-# Funzione obiettivo per Optuna
 
+    # Funzione obiettivo per Optuna
     def objective(trial):
-        # Definisci gli iperparametri da ottimizzare
         lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
         batch_size = trial.suggest_categorical('batch_size', [16, 32, 64, 128])
 
-        # Crea i DataLoader con il batch_size suggerito
-        #runno di nuovo il train con 5 secondi di finestra 
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True, shuffle=True)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True, sampler=train_sampler, collate_fn=collate_fn)
         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
-
-        # Crea il modello con gli iperparametri suggeriti
         net = DeepConvLSTM()
-
-        # Esegui l'allenamento
         best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
         
         return best_f1_score
 
-    # Creazione dello studio con il MedianPruner
+    # Creazione studio Optuna con MedianPruner
     study = optuna.create_study(
         direction='maximize', 
-        pruner=MedianPruner(n_startup_trials=5, n_warmup_steps=10)  # Parametri di pruning per evitare di continuare trial non promettenti: n_startup_trials=5 significa che i primi 5 trial non verranno prunati, n_warmup_steps=10 significa che dopo 10 trial verrà applicato il pruning
-        #Il pruner interromperà automaticamente i trial che non sono promettenti, basandosi sui punteggi parziali (F1-score) ottenuti durante l'allenamento.
+        pruner=MedianPruner(n_startup_trials=5, n_warmup_steps=10)
     )
     study.optimize(objective, n_trials=50)
 
-    print("Best hyperparameters: ", study.best_params)
-    print("Highest F1-score: ", study.best_value)
-
-    #salvo i best hyperparameters
+    # Salvataggio migliori iperparametri
     best_hyperparameters = study.best_params
     best_hyperparameters['best_f1_score'] = study.best_value
     best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_aug.csv'), index=False)
+    best_hyperparameters_df.to_csv(best_hyperparams_file, index=False)
 
-    #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
-    # è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
-    file_name = "optimization_history_dl_with_aug.png"
-    fig=vis.plot_optimization_history(study)
+    print("Migliori iperparametri trovati e salvati:", best_hyperparameters)
+    best_lr = study.best_params['lr']
+    best_batch_size = study.best_params['batch_size']
+
+    # Visualizzazione della storia dell'ottimizzazione
+    file_name = "optimization_history_dl_with_aug_and_sampler.png"
+    fig = vis.plot_optimization_history(study)
     plt.show()
-
-    # Salvo il grafico nella cartella FIGURES con il nome specificato
     fig.write_image(os.path.join(FIGURES_DIR, file_name))
+    print(f"Grafico salvato in {FIGURES_DIR}/{file_name}")
 
-    print(f"Grafico salvato in figures /{file_name}")
-
-
-# Crea i DataLoader con i migliori iperparametri
-train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=True, shuffle=True)
+# Ora crea e allena il modello con i migliori iperparametri
+train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=True, sampler=train_sampler, collate_fn=collate_fn)
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
 
-# Crea il modello con i migliori iperparametri
 best_net = DeepConvLSTM()
-
-# Esegui l'allenamento con i migliori iperparametri
-best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_with_aug.png")
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_with_aug_and_sampler")
 
 # Salva il miglior modello
-model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_with_aug.pth')
+model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_with_aug_and_sampler.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
 print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")
+
+
+
+
