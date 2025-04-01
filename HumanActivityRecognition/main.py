@@ -119,7 +119,7 @@ logger.debug(f"Deviazione standard: {scaler.scale_}")
 train_dataset = HARDataset(X_Train, Y_Train)
 test_dataset = HARDataset(X_Test, Y_Test)
 
-best_hyperparams_file=os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_without_sampler.csv')
+best_hyperparams_file=os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_without_sampler.csv')
 if os.path.exists(best_hyperparams_file):
     print("Carico i migliori iperparametri da ", best_hyperparams_file)
     best_hyperparameters=pd.read_csv(best_hyperparams_file).iloc[0].to_dict()
@@ -188,10 +188,10 @@ test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False
 best_net = DeepConvLSTM()
 
 # Esegui l'allenamento con i migliori iperparametri
-best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_without_sampler")
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_norm_without_sampler")
 
 # Salva il miglior modello
-model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_without_sampler.pth')
+model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_norm_without_sampler.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
 print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")
