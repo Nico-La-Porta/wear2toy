@@ -6,7 +6,7 @@ import sliding_window_on_data
 from torch.utils.data import DataLoader
 import glob
 
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset 
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn, create_weighted_sampler 
 import optuna
 import optuna.visualization as vis
 import train
@@ -141,7 +141,12 @@ Y_train = []
 X_test = []
 Y_test = []
 
-"""for action in unique_actions:
+# Trovo tutte le azioni uniche presenti nei dati
+unique_actions = np.unique(Y)
+print("Azioni uniche:", unique_actions)
+
+
+for action in unique_actions:
 
     #trovo gli indici delle finestre corrispondenti a ciascuna azione
     action_indices = np.where(Y == action)[0]
@@ -230,7 +235,7 @@ train_sampler=create_weighted_sampler(Y_train_mapped)
 def objective(trial):
     # Definisci gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    batch_size = trial.suggest_categorical('batch_size', [8, 12, 16])
+    batch_size = trial.suggest_categorical('batch_size', [2,4,8])
 
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 
@@ -238,7 +243,7 @@ def objective(trial):
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
     # Crea il modello con gli iperparametri suggeriti
-    net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13, sliding_window_length=30)
+    net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=9, sliding_window_length=100)
 
     # Esegui l'allenamento
     best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr, f1_average="macro")
@@ -284,7 +289,7 @@ train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=T
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
 
 # Crea il modello con i migliori iperparametri
-best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13, sliding_window_length=30)
+best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=9, sliding_window_length=100)
 # Esegui l'allenamento con i migliori iperparametri
 best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_with_sampler_macro", f1_average="macro")
 
@@ -292,4 +297,4 @@ best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=
 model_save_path = os.path.join(MODELS_DIR, 'best_model_ball_with_sampler_macro.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
-print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")"""
+print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")
