@@ -120,6 +120,9 @@ else:
     best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
     best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_without_sampler.csv'), index=False)
 
+    print("Migliori iperparametri trovati e salvati:", best_hyperparameters)
+    best_lr = study.best_params['lr']
+    best_batch_size = study.best_params['batch_size']
     #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
     # è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
     file_name = "optimization_history_dl_norm_without_sampler.png"

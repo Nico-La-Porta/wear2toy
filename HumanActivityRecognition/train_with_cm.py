@@ -155,8 +155,8 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
     
     # Matrice di confusione per il training set
     cm_train = confusion_matrix(all_train_labels, all_train_preds)
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(cm_train, annot=True, fmt="d", cmap="Greens", xticklabels=train_loader.dataset.classes, yticklabels=train_loader.dataset.classes)
+    plt.figure(figsize=(16, 13))
+    sns.heatmap(cm_train, annot=True, fmt="d", cmap="Greens", xticklabels=train_loader.dataset.classes, yticklabels=train_loader.dataset.classes, linewidths=0.5, square=True)
     plt.title("Confusion Matrix - Train Set")
     plt.xlabel("Predicted")
     plt.ylabel("True")
@@ -166,8 +166,8 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
 
     # Confusion Matrix - Test Set
     cm_test = confusion_matrix(all_test_labels, all_test_preds)
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(cm_test, annot=True, fmt="d", cmap="Blues", xticklabels=test_loader.dataset.classes, yticklabels=test_loader.dataset.classes)
+    plt.figure(figsize=(16, 13))
+    sns.heatmap(cm_test, annot=True, fmt="d", cmap="Blues", xticklabels=test_loader.dataset.classes, yticklabels=test_loader.dataset.classes, linewidths=0.5, square=True)
     plt.title("Confusion Matrix - Test Set")
     plt.xlabel("Predicted")
     plt.ylabel("True")

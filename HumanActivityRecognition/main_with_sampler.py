@@ -32,15 +32,44 @@ import train_with_cm
 init_weights.set_seed(42)
 
 # File per salvare i migliori iperparametri
-best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_sampler.csv')
+best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_with_sampler.csv')
 
 # Prepara i dati
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
 datasetTracesTest = data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
 dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
 dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
-X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(dataset_train_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
-X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
+grouped_activity_data = data_preprocessing.combine_and_group(dataset_train_labled, dataset_test_labled)
+
+
+
+
+
+# Calcolo KS test e statistiche per ogni attività
+data_preprocessing.check_normality_and_save_by_activity(grouped_activity_data, FIGURES_DIR)
+
+
+#carico i risultati del test di normalità 
+json_results = data_preprocessing.load_json_results(FIGURES_DIR)
+
+#applico gli scalers ai dati di train e di test
+scaled_train_data = data_preprocessing.apply_scalers_to_dataset(dataset_train_labled, json_results, FIGURES_DIR)
+
+logger.info("Train data scalers applied")
+#verifico media e deviazione standard
+
+
+scaled_test_data = data_preprocessing.apply_scalers_to_dataset(dataset_test_labled, json_results, FIGURES_DIR)
+logger.info("Test data scalers applied")
+
+
+logger.debug("Verifico se lo scaler è stato applicato correttamente")
+data_preprocessing.check_scaled_data(dataset_train_labled, scaled_train_data, "Train")
+data_preprocessing.check_scaled_data(dataset_test_labled, scaled_test_data, "Test")
+
+
+X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(scaled_train_data, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
+X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(scaled_test_data, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
 # Creazione dataset
 train_dataset = HARDataset(X_Train, Y_Train)
@@ -67,14 +96,14 @@ else:
         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
         net = DeepConvLSTM()
-        best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
+        best_f1_score = train.train(net, train_loader, test_loader, epochs=30, batch_size=batch_size, lr=lr)
         
         return best_f1_score
 
     # Creazione studio Optuna con MedianPruner
     study = optuna.create_study(
         direction='maximize', 
-        pruner=MedianPruner(n_startup_trials=5, n_warmup_steps=10)
+        pruner=MedianPruner(n_startup_trials=10, n_warmup_steps=10)
     )
     study.optimize(objective, n_trials=50)
 
@@ -89,7 +118,7 @@ else:
     best_batch_size = study.best_params['batch_size']
 
     # Visualizzazione della storia dell'ottimizzazione
-    file_name = "optimization_history_dl_with_sampler.png"
+    file_name = "optimization_history_dl_norm_with_sampler.png"
     fig = vis.plot_optimization_history(study)
     plt.show()
     fig.write_image(os.path.join(FIGURES_DIR, file_name))
@@ -100,10 +129,10 @@ train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=T
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
 
 best_net = DeepConvLSTM()
-best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_with_sampler")
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_norm_with_sampler")
 
 # Salva il miglior modello
-model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_with_sampler.pth')
+model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_norm_with_sampler.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
 print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")
