@@ -32,6 +32,15 @@ datasetTracesTest = data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
 dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
 dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
 
+
+classees_to_remove= [15,16,19,21]
+
+dataset_train_labled= data_preprocessing.remove_classes(dataset_train_labled, classees_to_remove)
+dataset_test_labled= data_preprocessing.remove_classes(dataset_test_labled, classees_to_remove)
+
+
+
+
 grouped_activity_data = data_preprocessing.combine_and_group(dataset_train_labled, dataset_test_labled)
 
 
@@ -39,7 +48,7 @@ grouped_activity_data = data_preprocessing.combine_and_group(dataset_train_lable
 
 
 # Calcolo KS test e statistiche per ogni attività
-data_preprocessing.check_normality_and_save_by_activity(grouped_activity_data, FIGURES_DIR)
+#data_preprocessing.check_normality_and_save_by_activity(grouped_activity_data, FIGURES_DIR)
 
 
 #carico i risultati del test di normalità 
@@ -64,6 +73,10 @@ data_preprocessing.check_scaled_data(dataset_test_labled, scaled_test_data, "Tes
 X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(scaled_train_data, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(scaled_test_data, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
+#verifico che le classi siano state rimosse correttamente
+#stampo i valori unici di y_train e y_test
+logger.debug("Classi in Y_train: %s", np.unique(Y_Train))
+logger.debug("Classi in Y_test: %s", np.unique(Y_Test))
 
 
 

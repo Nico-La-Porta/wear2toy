@@ -233,7 +233,7 @@ print("Tipo di test_dataset:", type(test_dataset))
 def objective(trial):
     # Definisci gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    batch_size = trial.suggest_categorical('batch_size', [2,4,8,12])
+    batch_size = trial.suggest_categorical('batch_size', [2,4,8])
 
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 

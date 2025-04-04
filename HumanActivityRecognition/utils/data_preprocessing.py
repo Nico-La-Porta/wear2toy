@@ -3,10 +3,10 @@ import numpy as np
 import json
 from utils.log_config import logger
 from typing import List, Dict, Any
-from scipy.stats import ks_1samp, norm
+#from scipy.stats import ks_1samp, norm
 from app_config import FIGURES_DIR
-from scipy import stats
-from sklearn.preprocessing import StandardScaler, RobustScaler
+#from scipy import stats
+#from sklearn.preprocessing import StandardScaler, RobustScaler
 #funzioni per:
     # 1)restituire una lista di file con una specifica estensione
     # 2)Caricare annotazioni e segnali da file .npz
@@ -86,6 +86,41 @@ def add_labels_to_dataset(dataset):
 
 
 
+def remove_classes(dataset, classes_to_remove):
+    """
+    Rimuove le tracce appartenenti alle classi specificate dal dataset.
+    
+    Args:
+    - dataset: Lista di dizionari contenente le tracce del dataset.
+    - classes_to_remove: Lista di interi che rappresentano le classi da rimuovere.
+    
+    Returns:
+    - Nuovo dataset con le tracce delle classi rimosse.
+    """
+    logger.info("Inizio rimozione classi. Classi da rimuovere: %s", classes_to_remove)
+    new_dataset = []  # Lista per memorizzare il dataset senza le classi rimosse
+    removed_count = 0 # Contatore per tracce rimosse
+    
+    for trace in dataset:
+        # Estrazione del numero dell'attività
+        activity = int(trace['TraceID'].split('_')[2].replace("Activity", ""))  # Eseguo parsing dell'activity
+        activity = activity - 1  # Sottraggo 1 per avere etichette da 0 a 28
+        
+        if activity in classes_to_remove:
+            removed_count += 1
+            continue  # Salta la traccia se l'attività è una di quelle da rimuovere
+        
+        
+        # Aggiungo la traccia al nuovo dataset
+        new_dataset.append(trace)
+    
+    logger.info("Rimozione completata. Numero tracce rimosse: %d", removed_count)
+    logger.info("Nuovo dataset contiene %d tracce.", len(new_dataset))
+
+    return new_dataset
+
+
+
 
 # Funzione per raggruppare il dataset per attività
 def group_by_activity(dataset: List[Dict[str, Any]]) -> Dict[int, List[np.ndarray]]:
@@ -129,18 +164,18 @@ def combine_and_group(train_data: List[Dict[str, Any]], test_data: List[Dict[str
 
 
 
-# Funzione per salvare i risultati in file JSON
+"""# Funzione per salvare i risultati in file JSON
 def save_results_to_json(results, figures_dir):
     if not os.path.exists(figures_dir):
         os.makedirs(figures_dir)
     for activity, activity_results in results.items():
         file_path = os.path.join(figures_dir, f"Activity_{activity}_results.json")
         with open(file_path, 'w') as f:
-            json.dump(activity_results, f, indent=4)
+            json.dump(activity_results, f, indent=4)"""
 
 
 # Funzione per eseguire il test di normalità e salvare i risultati
-def check_normality_and_save_by_activity(activity_data, figures_dir):
+"""def check_normality_and_save_by_activity(activity_data, figures_dir):
     results = {}
     for activity, data_list in activity_data.items():
         combined_data = np.vstack(data_list) ## Combino i dati per l'attività
@@ -163,7 +198,7 @@ def check_normality_and_save_by_activity(activity_data, figures_dir):
                 "IQR": iqr_val
             }
         results[activity] = activity_results
-    save_results_to_json(results, figures_dir)
+    save_results_to_json(results, figures_dir)"""
 
 
 def apply_scalers_to_dataset(dataset, json_results, figures_dir):
@@ -193,28 +228,30 @@ def apply_scalers_to_dataset(dataset, json_results, figures_dir):
         # Applico lo scaler per ciascun canale esclusa l'ultima colonna (l'etichetta)
         for feature_idx in range(trace_data.shape[1] - 1):  # Ignoro l'ultima colonna (activity)
             channel_key = f"Channel_{feature_idx+1}"
-            ks_p_value = activity_results.get(channel_key, {}).get("KS_p")
+            stats_dict = activity_results.get(channel_key, {})
+            ks_p_value = float(stats_dict.get("KS_p", 1.0))  # Valore di default se non trovato
 
-            ks_p_value = float(ks_p_value)
+            feature_data = trace_data[:, feature_idx]
             logger.info(f"p-value: {ks_p_value}")
-            if ks_p_value is None:
-                logger.warning(f"ATTENZIONE: Valore KS_p non trovato per Attività {activity}, Canale {channel_key}")
-                ks_p_value = 1.0  # Valore di default per evitare errori
-
 
             # Se il p-value è maggiore di 0.05, applica StandardScaler, altrimenti RobustScaler
             if ks_p_value > 0.05:
+                # StandardScaler
                 logger.info(f"Attività {activity}, Canale {channel_key}: p-value = {ks_p_value} (StandardScaler)")
-                scaler = StandardScaler()
+                mean = float(stats_dict.get("Mean", np.mean(feature_data)))
+                std = float(stats_dict.get("Std", np.std(feature_data)))
+                if std == 0: std = 1e-8  # Evito divisione per zero
+                scaled_feature = (feature_data - mean) / std
             else:
                 logger.info(f"Attività {activity}, Canale {channel_key}: p-value = {ks_p_value} (RobustScaler)")
-                scaler = RobustScaler()
-            
+                median = float(stats_dict.get("Median", np.median(feature_data)))
+                iqr = float(stats_dict.get("IQR", np.percentile(feature_data, 75) - np.percentile(feature_data, 25)))
+                if iqr == 0: iqr = 1e-8
+                scaled_feature = (feature_data - median) / iqr
             
 
-            # Applico lo scaler solo a questa colonna
-            # Reshape per fare il fit e trasformare la colonna in modo indipendente
-            scaled_trace_data[:, feature_idx] = scaler.fit_transform(trace_data[:, feature_idx].reshape(-1, 1)).flatten()
+            scaled_trace_data[:, feature_idx] = scaled_feature
+            
         
         # Aggiungo la traccia scalata al nuovo dataset
         new_trace = trace.copy()
