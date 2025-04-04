@@ -141,7 +141,11 @@ Y_train = []
 X_test = []
 Y_test = []
 
-"""for action in unique_actions:
+#trovo le azioni uniche
+unique_actions = np.unique(Y)
+print("Azioni uniche:", unique_actions)
+
+for action in unique_actions:
 
     #trovo gli indici delle finestre corrispondenti a ciascuna azione
     action_indices = np.where(Y == action)[0]
@@ -229,7 +233,7 @@ print("Tipo di test_dataset:", type(test_dataset))
 def objective(trial):
     # Definisci gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    batch_size = trial.suggest_categorical('batch_size', [8, 12, 16])
+    batch_size = trial.suggest_categorical('batch_size', [2,4,8,12])
 
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 
@@ -292,4 +296,4 @@ best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=
 model_save_path = os.path.join(MODELS_DIR, 'best_model_ball_without_sampler_weighted.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
-print(f"Best model trained without the optimal hyperparameters and saved at {model_save_path}")"""
+print(f"Best model trained without the optimal hyperparameters and saved at {model_save_path}")
