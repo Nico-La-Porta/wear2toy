@@ -11,6 +11,7 @@ import optuna
 import optuna.visualization as vis
 import train
 import torch
+import torch.nn as nn
 import train_with_cm
 import matplotlib.pyplot as plt
 #definisco il path da cui leggere i .csv
@@ -141,7 +142,13 @@ Y_train = []
 X_test = []
 Y_test = []
 
-"""for action in unique_actions:
+#trovo azioni uniche 
+
+unique_actions = np.unique(Y)
+print("Azioni uniche:", unique_actions)
+
+
+for action in unique_actions:
 
     #trovo gli indici delle finestre corrispondenti a ciascuna azione
     action_indices = np.where(Y == action)[0]
@@ -240,7 +247,7 @@ print("Tipo di test_dataset:", type(test_dataset))
 def objective(trial):
     # Definisci gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    batch_size = trial.suggest_categorical('batch_size', [4, 8, 12])
+    batch_size = trial.suggest_categorical('batch_size', [4,6,8])
 
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 
@@ -251,7 +258,7 @@ def objective(trial):
     model = DeepConvLSTM()
 
         # Rimuovi la testa originale, in modo da non caricare i pesi associati
-    model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_without_sampler.pth'), strict=False)
+    model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_norm_without_sampler.pth'), strict=False)
 
 
     # Ora sostituisco la testa del modello con la nuova dimensione di classi (4)
@@ -285,14 +292,14 @@ print("Highest F1-score: ", study.best_value)
 best_hyperparameters = study.best_params
 best_hyperparameters['best_f1_score'] = study.best_value
 best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_inference_without_sampler_weighted.csv'), index=False)
+best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_inference_norm_without_sampler_weighted.csv'), index=False)
 
 
 
 
 #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come la loss
 # è cambiata nel corso delle diverse prove (trials) durante l'ottimizzazione.
-file_name = "optimization_history_inference_ball_without_sampler_weighted.png"
+file_name = "optimization_history_inference_ball_norm_without_sampler_weighted.png"
 fig=vis.plot_optimization_history(study)
 plt.show()
 
@@ -310,7 +317,7 @@ print(f"Grafico salvato in figures /{file_name}")
 model = DeepConvLSTM()
 
         # Rimuovi la testa originale, in modo da non caricare i pesi associati
-model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_without_sampler.pth'), strict=False)
+model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_norm_without_sampler.pth'), strict=False)
 
     # Ora sostituisci la testa del modello con la nuova dimensione di classi (4)
 num_ftrs = model.fc.in_features
@@ -337,11 +344,7 @@ train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=T
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
 
 
-best_f1_score = train_with_cm.train(model, train_loader, test_loader, epochs=100,batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_inference_without_sampler_weighted", patience=7, f1_average='weighted')
+best_f1_score = train_with_cm.train(model, train_loader, test_loader, epochs=100,batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_inference_norm_without_sampler_weighted", patience=7, f1_average='weighted')
 print(f"Best F1 score: {best_f1_score}")
 
 
-
-
-
-"""

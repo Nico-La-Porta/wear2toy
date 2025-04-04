@@ -33,10 +33,10 @@ dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTra
 dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
 
 
-classees_to_remove= [15,16,19,21]
+"""classees_to_remove= [15,16,19,21]
 
 dataset_train_labled= data_preprocessing.remove_classes(dataset_train_labled, classees_to_remove)
-dataset_test_labled= data_preprocessing.remove_classes(dataset_test_labled, classees_to_remove)
+dataset_test_labled= data_preprocessing.remove_classes(dataset_test_labled, classees_to_remove)"""
 
 
 
@@ -162,6 +162,8 @@ best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=
 
 # Salva il miglior modello
 model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_norm_without_sampler.pth')
+if not os.path.exists(MODELS_DIR):
+    os.makedirs(MODELS_DIR)
 torch.save(best_net.state_dict(), model_save_path)
 
 print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")
