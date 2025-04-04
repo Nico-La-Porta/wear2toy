@@ -33,10 +33,10 @@ dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTra
 dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
 
 
-"""classees_to_remove= [15,16,19,21]
+classees_to_remove= [15,16,19,21]
 
 dataset_train_labled= data_preprocessing.remove_classes(dataset_train_labled, classees_to_remove)
-dataset_test_labled= data_preprocessing.remove_classes(dataset_test_labled, classees_to_remove)"""
+dataset_test_labled= data_preprocessing.remove_classes(dataset_test_labled, classees_to_remove)
 
 
 
@@ -86,7 +86,7 @@ logger.debug("Classi in Y_test: %s", np.unique(Y_Test))
 train_dataset = HARDataset(X_Train, Y_Train)
 test_dataset = HARDataset(X_Test, Y_Test)
 
-best_hyperparams_file=os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_without_sampler.csv')
+best_hyperparams_file=os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_without_sampler_removed_4_classes.csv')
 if os.path.exists(best_hyperparams_file):
     print("Carico i migliori iperparametri da ", best_hyperparams_file)
     best_hyperparameters=pd.read_csv(best_hyperparams_file).iloc[0].to_dict()
@@ -131,14 +131,14 @@ else:
     best_hyperparameters = study.best_params
     best_hyperparameters['best_f1_score'] = study.best_value
     best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_without_sampler.csv'), index=False)
+    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_without_sampler_removed_4_classes.csv'), index=False)
 
     print("Migliori iperparametri trovati e salvati:", best_hyperparameters)
     best_lr = study.best_params['lr']
     best_batch_size = study.best_params['batch_size']
     #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
     # è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
-    file_name = "optimization_history_dl_norm_without_sampler.png"
+    file_name = "optimization_history_dl_norm_without_sampler_removed_4_classes.png"
     fig=vis.plot_optimization_history(study)
     plt.show()
 
@@ -158,10 +158,10 @@ test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False
 best_net = DeepConvLSTM()
 
 # Esegui l'allenamento con i migliori iperparametri
-best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_norm_without_sampler")
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_norm_without_sampler_removed_4_classes.png")
 
 # Salva il miglior modello
-model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_norm_without_sampler.pth')
+model_save_path = os.path.join(MODELS_DIR, 'best_model_dl_norm_without_sampler_removed_4_classes.pth')
 if not os.path.exists(MODELS_DIR):
     os.makedirs(MODELS_DIR)
 torch.save(best_net.state_dict(), model_save_path)
