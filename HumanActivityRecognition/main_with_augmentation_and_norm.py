@@ -157,7 +157,7 @@ else:
         pruner=MedianPruner(n_startup_trials=5, n_warmup_steps=10)  # Parametri di pruning per evitare di continuare trial non promettenti: n_startup_trials=5 significa che i primi 5 trial non verranno prunati, n_warmup_steps=10 significa che dopo 10 trial verrà applicato il pruning
         #Il pruner interromperà automaticamente i trial che non sono promettenti, basandosi sui punteggi parziali (F1-score) ottenuti durante l'allenamento.
     )
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=50)
 
     logger.info("Best hyperparameters: ", study.best_params)
     logger.info("Highest F1-score: ", study.best_value)
