@@ -1,38 +1,29 @@
-import torch
 import os
 import sys
+import pandas as pd
+import matplotlib.pyplot as plt
+
+import torch
+import optuna
+import optuna.visualization as vis
+from torch.utils.data import DataLoader
+from optuna.pruners import MedianPruner
 
 from app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
-import pandas as pd
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 
-
-from utils import data_preprocessing
-from utils.log_config import logger
+import train_with_cm
+import sliding_window_on_data
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset
 
 from run_config import SLIDING_WINDOW_LENGTH
 from run_config import NB_SENSOR_CHANNELS
 from run_config import SLIDING_WINDOW_STEP
 
-import sliding_window_on_data
-from torch.utils.data import DataLoader
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset
-
-
-from utils import init_weights
-import train
-import train_with_cm
-
-import optuna
-import optuna.visualization as vis
-from optuna.pruners import MedianPruner
-import matplotlib.pyplot as plt
+from utils.log_config import logger
 from utils.transformations import *
 from utils.transformations_utils import *
-from utils.log_config import logger
-
-
-
+from utils import data_preprocessing, init_weights
 
 # Impostazione il seed per la riproducibilità
 init_weights.set_seed(42)
@@ -44,12 +35,11 @@ best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
 datasetTracesTest = data_preprocessing.build_dataset(RAW_DATA_DIR_TEST)
 dataset_train_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTrain)
-dataset_test_labled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
+dataset_test_labeled = data_preprocessing.add_labels_to_dataset(datasetTracesTest)
 X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(dataset_train_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
-X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
+X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(dataset_test_labeled, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
-
-print(X_Train.shape)
+del datasetTracesTrain, datasetTracesTest, dataset_train_labled, dataset_test_labeled
 
 #DATA AUGUMENTATION
 transform_funcs = [
@@ -88,18 +78,19 @@ for cls in classi_da_augumentare:
 X_aug_selected = np.concatenate(X_aug_list, axis=0)
 Y_aug_selected = np.concatenate(Y_aug_list, axis=0)
 
+del X_aug_list, Y_aug_list
+
 # Aggiungo  al dataset originale
 X_Train_augmented = np.concatenate((X_Train, X_aug_selected), axis=0)
 Y_Train_augmented = np.concatenate((Y_Train, Y_aug_selected), axis=0)
 
+del X_aug_selected, Y_aug_selected
+
 logger.info(f"Dimensioni di X_Train_augmented: {X_Train_augmented.shape}")
 logger.info(f"Dimensioni di Y_Train_augmented: {Y_Train_augmented.shape}")
 
-
-
 train_dataset = HARDataset(X_Train_augmented, Y_Train_augmented)
 test_dataset = HARDataset(X_Test, Y_Test)
-
 
 best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_without_norm_without_sampler_augmented_4_classes.csv')
 if os.path.exists(best_hyperparams_file):
@@ -177,19 +168,21 @@ train_with_cm.train(
     save_confusion_matrix=True  # Genera solo ora le matrici di confusione
 )
 
-#ESEGUO SOLO TRAINING
+# ESEGUO SOLO TRAINING
 # Crea il modello con i migliori iperparametri
 best_net = DeepConvLSTM()
 
 # Concateno i datasets
-X = np.concatenate(X_Train, X_Test, axis=0)
-Y = np.concatenate(Y_Train, Y_Test, axis=0)
+X = np.concatenate(X_Train_augmented, X_Test, axis=0)
+Y = np.concatenate(Y_Train_augmented, Y_Test, axis=0)
 
-del X_Train, X_Test, Y_Train, Y_Test, train_dataset, test_dataset
+del X_Train_augmented, X_Test, Y_Train_augmented, Y_Test, train_dataset, test_dataset
 
 # Creo dataloader
 complete_dataset = HARDataset(X, Y)
+del X, Y
 complete_dataloader = DataLoader(complete_dataset, batch_size=best_batch_size, drop_last=True, shuffle=True)
+del complete_dataset
 
 # Esegui l'allenamento con i migliori iperparametri
 best_f1_score = train_with_cm.train(best_net, complete_dataloader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_dl_without_norm_without_sampler_augmented_4_classes.png", validate=False, save_confusion_matrix=True)

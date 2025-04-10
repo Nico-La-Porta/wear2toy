@@ -1,9 +1,11 @@
-import numpy as np
 import os
 import sys
+import numpy as np
 import pandas as pd
+
 from app_config import PROJ_ROOT
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
+
 from utils import data_processing
 from utils.log_config import logger
 

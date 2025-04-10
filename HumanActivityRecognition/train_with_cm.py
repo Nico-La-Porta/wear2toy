@@ -152,27 +152,48 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
             net.eval()
             break
     
+
     # Matrice di confusione per il training set
     cm_train = confusion_matrix(all_train_labels, all_train_preds)
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(cm_train, annot=True, fmt="d", cmap="Greens", xticklabels=train_loader.dataset.classes, yticklabels=train_loader.dataset.classes)
-    plt.title("Confusion Matrix - Train Set")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
+    plt.figure(figsize=(15, 12))  # Aumenta la dimensione della figura per adattarsi a 29 classi
+    sns.heatmap(cm_train, annot=True, fmt="d", cmap="Greens", 
+                xticklabels=train_loader.dataset.classes, 
+                yticklabels=train_loader.dataset.classes,
+                annot_kws={"size": 10},  # Riduce la dimensione del testo
+                cbar_kws={"shrink": 0.8},  # Modifica la dimensione del colorbar
+                linewidths=0.5,  # Aggiungi una linea tra le celle
+                linecolor='gray',  # Imposta un colore per le linee tra le celle
+                square=True,  # Rende la matrice quadrata
+                cbar=True)  # Mostra la barra del colore
+    plt.title("Confusion Matrix - Train Set", fontsize=18)  # Titolo più grande
+    plt.xlabel("Predicted", fontsize=14)
+    plt.ylabel("True", fontsize=14)
+    plt.xticks(rotation=90, ha="right", fontsize=10)  # Ruota le etichette x a 90 gradi per maggiore leggibilità
+    plt.yticks(rotation=0, ha="right", fontsize=10)  # Ruota le etichette y
+    plt.tight_layout()  # Ottimizza il layout per evitare sovrapposizioni
     plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_train_confusion_matrix.png"))
     plt.close()
 
-
-    # Confusion Matrix - Test Set
+    # Matrice di confusione per il test set
     cm_test = confusion_matrix(all_test_labels, all_test_preds)
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(cm_test, annot=True, fmt="d", cmap="Blues", xticklabels=test_loader.dataset.classes, yticklabels=test_loader.dataset.classes)
-    plt.title("Confusion Matrix - Test Set")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
+    plt.figure(figsize=(15, 12))  # Aumenta la dimensione della figura per adattarsi a 29 classi
+    sns.heatmap(cm_test, annot=True, fmt="d", cmap="Blues", 
+                xticklabels=test_loader.dataset.classes, 
+                yticklabels=test_loader.dataset.classes,
+                annot_kws={"size": 10},  # Riduce la dimensione del testo
+                cbar_kws={"shrink": 0.8},  # Modifica la dimensione del colorbar
+                linewidths=0.5,  # Aggiungi una linea tra le celle
+                linecolor='gray',  # Imposta un colore per le linee tra le celle
+                square=True,  # Rende la matrice quadrata
+                cbar=True)  # Mostra la barra del colore
+    plt.title("Confusion Matrix - Test Set", fontsize=18)  # Titolo più grande
+    plt.xlabel("Predicted", fontsize=14)
+    plt.ylabel("True", fontsize=14)
+    plt.xticks(rotation=90, ha="right", fontsize=10)  # Ruota le etichette x a 90 gradi per maggiore leggibilità
+    plt.yticks(rotation=0, ha="right", fontsize=10)  # Ruota le etichette y
+    plt.tight_layout()  # Ottimizza il layout per evitare sovrapposizioni
     plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_test_confusion_matrix.png"))
     plt.close()
-
 
 
 
