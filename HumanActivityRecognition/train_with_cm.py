@@ -6,8 +6,10 @@ from sklearn.metrics import confusion_matrix, f1_score
 import seaborn as sns
 from app_config import MODELS_DIR, FIGURES_DIR
 from utils import check_gpu
+from utils.log_config import logger
 
-train_on_gpu=check_gpu.check_gpu_availability()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+logger.info(f"Training on: {device}")
 
 """class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
@@ -54,8 +56,7 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
     opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
     criterion = torch.nn.CrossEntropyLoss()
 
-    if train_on_gpu:
-        net.cuda()
+    net.to(device)  # Sposta il modello sulla GPU se disponibile
 
     #storicizzo i valori di loss e accuracy
     train_loss_history = [] 
@@ -80,8 +81,7 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
         #calcolo dell'f1-score di train
         train_f1score = 0 #variabile per l'f1-score di train
         for inputs, targets in train_loader: 
-            if train_on_gpu:
-                inputs, targets = inputs.cuda(), targets.cuda()
+            inputs, targets = inputs.to(device), targets.to(device) #sposto i dati sulla gpu se disponibile
             batch_size = inputs.size(0)
             h = net.init_hidden(batch_size)
             opt.zero_grad()
@@ -114,8 +114,7 @@ def train(net, train_loader, test_loader, epochs=10, batch_size=16, lr=0.01, pat
                 batch_size = inputs.size(0)
                 val_h = tuple([each.data for each in val_h])
 
-                if train_on_gpu:
-                    inputs, targets = inputs.cuda(), targets.cuda()
+                inputs, targets = inputs.to(device), targets.to(device) #sposto i dati sulla gpu se disponibile
 
                 output, val_h = net(inputs, val_h, batch_size)
                 val_loss = criterion(output, targets.long())
