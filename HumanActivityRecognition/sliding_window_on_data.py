@@ -24,23 +24,31 @@ def apply_sliding_window(new_dataset_labeled, sliding_window_length, sliding_win
         X_trace = data[:, 1:-2]  # Escludi prima colonna, penultima e ultima
         Y_trace = data[:, -1]   # Prendi l'ultima colonna (label)
 
-        print("X_trace shape:", X_trace.shape)
-        print("Y_trace shape:", Y_trace.shape)
+        logger.info(f"Processing trace with shape: {data.shape}")
+        logger.info(f"X_trace shape: {X_trace.shape}")
+        logger.info(f"Y_trace shape: {Y_trace.shape}")
 
         # Applicazione della sliding window
-        X_windows = data_processing.sliding_window(X_trace, ws=(sliding_window_length, X_trace.shape[1]), ss=(sliding_window_step, X_trace.shape[1]))
-        print("X_windows shape:", X_windows.shape)
+        X_windows, padding_codes_x = data_processing.sliding_window(X_trace, ws=(sliding_window_length, X_trace.shape[1]), ss=(sliding_window_step, X_trace.shape[1]))
 
-        Y_windows_full = data_processing.sliding_window(Y_trace.reshape(-1, 1), ws=(sliding_window_length, 1), ss=(sliding_window_step, 1))
+        logger.debug(f"X_windows shape after sliding window: {X_windows.shape}")
+        logger.debug(f"Padding codes: {padding_codes_x}")
 
+        Y_windows_full, padding_codes_y = data_processing.sliding_window(Y_trace.reshape(-1, 1), ws=(sliding_window_length, 1), ss=(sliding_window_step, 1))
+        logger.debug(f"Y_windows_full shape after sliding window: {Y_windows_full.shape}")
+        logger.debug(f"Padding codes: {padding_codes_y}")
         # Estrai l'ultima etichetta di ogni finestra
-        Y_windows = np.asarray([window[-1] for window in Y_windows_full])
-        print("Y_window shape:", Y_windows.shape)
+        Y_windows = np.asarray([window[np.nonzero(window)[0][0]] if np.any(window != 0) else 0 for window in Y_windows_full])
+        logger.debug(f"Y_windows shape after extraction: {Y_windows.shape}")
 
         # Aggiungi le finestre ottenute a X_train e Y_train
         X.append(X_windows)
         Y.append(Y_windows)
 
+    for i, window in enumerate(Y):
+        logger.debug(f"Shape of Y window {i}: {window.shape}")
+
+    Y = [window.flatten() for window in Y]
     # Conversione X_train e Y_train in numpy array per facilità di elaborazione successiva
     X = np.vstack(X)  # Concatenazione di tutte le finestre di X
     Y = np.concatenate(Y)  # Concatenazione di tutte le finestre di Y
@@ -53,6 +61,7 @@ def apply_sliding_window(new_dataset_labeled, sliding_window_length, sliding_win
     X = X.reshape((-1, sliding_window_length, nb_sensor_channels))
 
     return X, Y
+
 
 
 def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step):

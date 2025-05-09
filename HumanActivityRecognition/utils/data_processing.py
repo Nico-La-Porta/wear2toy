@@ -76,7 +76,7 @@ def sliding_window(a, ws, ss=None, flatten=True, min_pad_samples=30, extreme_pad
     if 1 != len(set(ls)):
         raise ValueError(f'a.shape, ws e ss devono avere la stessa lunghezza. Valori ricevuti: {ls}')
     
-    padding_code_vectore = []
+    padding_code_vector = []
 
     # Se la lunghezza della finestra è maggiore del  numero di campioni disponibili, aggiungo padding
     if np.any(ws > shape):
@@ -95,9 +95,9 @@ def sliding_window(a, ws, ss=None, flatten=True, min_pad_samples=30, extreme_pad
             padded_samples = np.concatenate((padded_samples, np.zeros((padding_end,) + a.shape[1:])), axis=0) # Aggiungo padding alla fine
             a = padded_samples # Aggiorno l'array con i campioni aggiunti
             if num_actual_samples < min_pad_samples and num_actual_samples > extreme_pad_samples:
-                padding_code_vectore.append(2)
+                padding_code_vector.append(2)
             elif num_actual_samples < ws[0]:
-                padding_code_vectore.append(1)
+                padding_code_vector.append(1)
             logger.info(f"Nuova lunghezza array: {len(a)}")
             shape = np.array(a.shape) # Aggiorno la forma dell'array con i nuovi campioni aggiunti
 
@@ -119,6 +119,36 @@ def sliding_window(a, ws, ss=None, flatten=True, min_pad_samples=30, extreme_pad
     strided = ast(a, shape=newshape, strides=newstrides)
     #stampo il numero di finestre estratte
     logger.info(f"Numero di finestre estratte: {strided.shape[0]}")
+
+    # Verifico se rimangono campioni dopo l'ultima finestra completa
+    '''differenza tra numero totale di campioni (shape[0]) e la quantità di campioni che sono stati gia "coperti" dalle finestre mobili complete.
+    -newshape[0]-1 *ss[0] : calcola la distanza in termini di campioni che c'è tra la prima finestra e l'ultima finestra estratta, tenendo conto del passo ss[0]. 
+    -newshape[0] - 1 è il numero di "passi" tra la prima e l'ultima finestra. Ogni passo è lungo ss[0], che rappresenta la distanza in campioni tra due finestre consecutive.
+    - ws[0]: Questo sottrae la lunghezza della finestra (ws[0]) perché, una volta che l'ultima finestra è stata estratta, la sua lunghezza non è più necessaria nel calcolo dei campioni rimanenti.'''
+    remaining_samples = (shape[0] - ((newshape[0] - 1) * ss[0]) - ws[0]) 
+    logger.debug(f"Campioni rimanenti dopo l'ultima finestra completa: {remaining_samples}")
+    if remaining_samples > 0:
+        if remaining_samples > extreme_pad_samples:
+            num_padding = ws[0] - remaining_samples 
+            padding_start = np.random.randint(1, num_padding)
+            padding_end = num_padding - padding_start
+            last_window = np.concatenate((a[-remaining_samples:], np.zeros((padding_end, a.shape[1]))), axis=0)
+            last_window = np.concatenate((np.zeros((padding_start, a.shape[1])), last_window), axis=0)
+            last_window = last_window[None, :, :]
+
+            strided = np.concatenate((strided, last_window[None, :]), axis=0)
+            newshape = strided.shape
+
+            if remaining_samples < min_pad_samples and remaining_samples > extreme_pad_samples:
+                padding_code_vector.append(2)
+                logger.info(f"Padding estremo applicato. Padding code: 2")
+            elif remaining_samples < ws[0]:
+                padding_code_vector.append(1)
+                logger.info(f"Padding normale applicato. Padding code: 1")
+            
+            logger.debug(f"Nuova finestra con padding: {last_window.shape}")
+        else:
+            logger.info("Non è stato applicato padding perché i campioni rimanenti sono troppo pochi.")
     
     if not flatten:
         return strided
@@ -126,10 +156,11 @@ def sliding_window(a, ws, ss=None, flatten=True, min_pad_samples=30, extreme_pad
     # Se flatten è True, riduco le dimensioni dell'array trasformandolo in una lista piatta di finestre anizhcè una lista di finestre multidimensionali
     meat = len(ws) if ws.shape else 0 #numero di dimensioni della finestra
     firstdim = (np.prod(newshape[:-meat]),) if ws.shape else () #prodotto delle dimensioni della finestra (esclusa la dimensione delle finestre) => mi restituisce il numero di finestre
-    dim = firstdim + tuple(newshape[-meat:],) #aggiungo le dimensioni della finestra => mi restituisce il numero di finestre e le dimensioni della finestra
+    dim = firstdim + tuple(newshape[-meat:]) #aggiungo le dimensioni della finestra => mi restituisce il numero di finestre e le dimensioni della finestra
     strided = strided.reshape(dim) #riduco le dimensioni dell'array trasformandolo in una lista piatta di finestre
-    
-    return strided
+    logger.info(f"Numero totale di finestre (dopo padding finale): {strided.shape[0]}")
+    return strided, padding_code_vector
+
 
 
 
