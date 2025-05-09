@@ -179,3 +179,4 @@ notebooks/*
 har_dl.sif
 models/*
 .vscode/sftp.json
+logs/*
