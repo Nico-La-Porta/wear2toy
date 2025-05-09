@@ -29,28 +29,28 @@ print(path)
 # Definisco il percorso della cartella contenente i CSV
 
 # Nome del file CSV finale
-final_csv_path = os.path.join(path, 'df_BA_non_null.csv')
+final_csv_path = os.path.join(path, 'df_CAR_non_null.csv')
 
 # Controllo se il file esiste già
 if os.path.exists(final_csv_path):
     print(f"Il file {final_csv_path} esiste già. Lo sto caricando...")
-    df_ball = pd.read_csv(final_csv_path)
+    df_car = pd.read_csv(final_csv_path)
 else:
-    #trovo tutti i file che corrispondono a "BA" nella cartella path e li stampo a schermo
-    files = glob.glob(os.path.join(path, "*_BA*.csv"))
+    #trovo tutti i file che corrispondono a "C*" nella cartella path e li stampo a schermo
+    files = glob.glob(os.path.join(path, "*_C*.csv"))
     print("Files:", files)
     
-    kid_ball, kid_ball_no_null = [], [] # liste per salvare utenti prima e dopo il merge 
-    df_list_ball = [] # lista vuota per appendere i dataframe con attività non nulla
+    kid_car, kid_car_no_null = [], [] # liste per salvare utenti prima e dopo il merge 
+    df_list_car = [] # lista vuota per appendere i dataframe con attività non nulla
 
     for file in files:
         df = pd.read_csv(file)
         
         print("Original shape:", df.shape)
-        kid_ball.append(df['kid_id'].unique())
+        kid_car.append(df['kid_id'].unique())
         df = df[df['action_id'] != 0] #filtro le righe con action_id non nullo
         print("Filtered shape:", df.shape)
-        kid_ball_no_null.append(df['kid_id'].unique())
+        kid_car_no_null.append(df['kid_id'].unique())
 
         print("Columns:", df.columns)
         print("Action counts:\n", df['action'].value_counts())
@@ -58,57 +58,57 @@ else:
         print("="*50)  # Separatore tra i file
 
     # mi stampo gli utenti prima di fare il merge e dopo il merge
-    logger.info(f"Numero di utenti che hanno fatto almeno un azione: {len(kid_ball_no_null)/len(kid_ball)}")
+    logger.info(f"Numero di utenti che hanno fatto almeno un azione: {len(kid_car_no_null)/len(kid_car)}")
 
     '''
     Visto che l'informazione relativa all'id del bambino lo abbiamo, così come abbiamo anche l'informazione relativa
     al giocattolo, vado a filtrare i .csv in modo tale da avere solo le righe che hanno l'attività non nulla e poi
-    appendo tutte le righe non nulle in un unico dataframe per tutti i file che terminano in .csv nella balltella path
+    appendo tutte le righe non nulle in un unico dataframe per tutti i file che terminano in .csv nella cartella path
     '''
 
     for file in os.listdir(path):
         if not file.endswith('.csv'):
             continue
     
-        #leggo solo i file che dopo l'undescore ha BA*.csv
+        #leggo solo i file che dopo l'undescore ha BE*.csv
         if file.split('_')[-1].startswith('C') and file.endswith('.csv'): #controllo che il file termini con .csv
             df_temp=pd.read_csv(os.path.join(path,file))
             df_temp = df_temp[df_temp['action_id'] != 0]
-            df_list_ball.append(df_temp)
+            df_list_car.append(df_temp)
 
-    df_ball = pd.concat(df_list_ball)
-    print("Dimensioni del df_ball con tutte le attività non nulle")
-    print(df_ball.shape)
-    print(df_ball.columns)
-    print(df_ball['action'].value_counts())
+    df_car = pd.concat(df_list_car)
+    print("Dimensioni del df_car con tutte le attività non nulle")
+    print(df_car.shape)
+    print(df_car.columns)
+    print(df_car['action'].value_counts())
 
     # salvo il dataframe
-    df_ball.to_csv(os.path.join(path,'df_BA_non_null.csv'),index=False)
+    df_car.to_csv(os.path.join(path,'df_CAR_non_null.csv'),index=False)
 
 
 #ora divido il dataframe in base all'attività (action_id) e salvo i dataframe in un file .csv
 #per ogni attività
 
-for action_id in df_ball['action_id'].unique():
-    df_action = df_ball[df_ball["action_id"] == action_id] #filtro il dataframe in base all'attività
-    logger.debug(f"Dimensioni del dataframe df_ball_action_{action_id} - {df_action.shape}") #log delle dimensioni del dataframe
-    logger.info(f"Conteggio delle attività per df_ball_action_{action_id}") #log del conteggio delle attività
+for action_id in df_car['action_id'].unique():
+    df_action = df_car[df_car["action_id"] == action_id] #filtro il dataframe in base all'attività
+    logger.debug(f"Dimensioni del dataframe df_car_action_{action_id} - {df_action.shape}") #log delle dimensioni del dataframe
+    logger.info(f"Conteggio delle attività per df_car_action_{action_id}") #log del conteggio delle attività
     #salvo il dataframe
-    df_action.to_csv(os.path.join(path,f'df_ball_action_{action_id}.csv'),index=False) #index=False per non salvare l'indice
-    logger.debug(f"Salvato il dataframe df_ball_action_{action_id}.csv")
+    df_action.to_csv(os.path.join(path,f'df_car_action_{action_id}.csv'),index=False) #index=False per non salvare l'indice
+    logger.debug(f"Salvato il dataframe df_car_action_{action_id}.csv")
 
 #applico sliding window con la funzion process_csv
 nb_sensor_channels = 9
 sliding_window_length = 100
 sliding_window_step = 50
 
-#ora applico la funzione sliding window (che mi da come output x_window e y_window) a tutti i .csv relativi al giocattolo ball
+#ora applico la funzione sliding window (che mi da come output x_window e y_window) a tutti i .csv relativi al giocattolo car
 #e poi concateno tutto in un unica x e y 
 
 X, Y = [], []
 kid_action_counts = {}
 
-for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.split('_')[1] == 'ball']:
+for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.split('_')[1] == 'car']:
     file_path = os.path.join(path, action_file)
     action = action_file.split('_')[-1].split('.')[0]
 
@@ -119,8 +119,8 @@ for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.spli
 
 
     logger.info(f"Numero  totale di finestre per l'azione {action}:{len(X_windows)}")
-    kid_action_counts[f"ball_action_{action}"] = kid_id_action_dict #aggiungo il dizionario al dizionario principale per tenere traccia del numero di finestre per ogni bambino per ogni azione, ogni ball_action è una chiave e il valore è un dizionario con il numero di finestre per ogni bambino
-    logger.info(f"Contenuto finale di kid_action_counts: {kid_action_counts}") #per veere quante finestre per ogni azione e per ogni bambino sono state elaborte 
+    kid_action_counts[f"car_action_{action}"] = kid_id_action_dict #aggiungo il dizionario al dizionario principale per tenere traccia del numero di finestre per ogni bambino per ogni azione, ogni car_action è una chiave e il valore è un dizionario con il numero di finestre per ogni bambino
+    logger.info(f"Contenuto finale di kid_action_counts: {kid_action_counts[f'car_action_{action}']}") #per vedere quante finestre per ogni azione e per ogni bambino sono state elaborate
 
 
 # Concateno tutti i dati in un unico array per X e Y
@@ -141,11 +141,7 @@ Y_train = []
 X_test = []
 Y_test = []
 
-#trovo le azioni uniche
-unique_actions = np.unique(Y)
-print("Azioni uniche:", unique_actions)
-
-for action in unique_actions:
+"""for action in unique_actions:
 
     #trovo gli indici delle finestre corrispondenti a ciascuna azione
     action_indices = np.where(Y == action)[0]
@@ -215,7 +211,7 @@ print("Nuove etichette train:", np.unique(Y_train_mapped))
 print("Nuove etichette test:", np.unique(Y_test_mapped))
 
 
-# Creo i dataset per il training val e test
+# Creo i dataset per il training e il test
 train_dataset = HARDataset(X_train, Y_train_mapped)
 test_dataset = HARDataset(X_test, Y_test_mapped)
 
@@ -228,39 +224,41 @@ print("Tipo di test_dataset:", type(test_dataset))
 
 
 
+# Creazione sampler pesato per il dataset di training
+train_sampler = create_weighted_sampler(Y_train_mapped)
+
 
 
 def objective(trial):
     # Definisci gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    batch_size = trial.suggest_categorical('batch_size', [2,4,8])
+    batch_size = trial.suggest_categorical('batch_size', [4, 8, 12])
 
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,drop_last=True, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=True,sampler=train_sampler, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
     # Crea il modello con gli iperparametri suggeriti
-    net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=9, sliding_window_length=100)
+    net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13)
 
     # Esegui l'allenamento
-    best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr, f1_average="weighted")
+    best_f1_score = train.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
     
     return best_f1_score
 
 # Creazione studio Optuna ottimizza, nel senso di minimizzare la loss in 100 prove
 study = optuna.create_study(direction='maximize')
+logger.info("Inizio ottimizzazione degli iperparametri")
 study.optimize(objective, n_trials=100)
 
-print("Best hyperparameters: ", study.best_params)
-print("Highest F1-score: ", study.best_value)
-
+logger.info(f"Fine ottimizzazione degli iperparametri - Migliori iperparametri: {study.best_params} - Miglior F1-score: {study.best_value}")
 
 #salvo i best hyperparameters
 best_hyperparameters = study.best_params
 best_hyperparameters['best_f1_score'] = study.best_value
 best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_without_sampler_weighted.csv'), index=False)
+best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_car_without_sampler.csv'), index=False)
 
 
 
@@ -268,15 +266,13 @@ best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_b
 
 #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
 # è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
-file_name = "optimization_history_ball_without_sampler_weighted.png"
+file_name = "optimization_history_car_without_sampler.png"
 fig=vis.plot_optimization_history(study)
 plt.show()
 
 # Salvo il grafico nella cartella FIGURES con il nome specificato
 fig.write_image(os.path.join(FIGURES_DIR, file_name))
-
-print(f"Grafico salvato in figures /{file_name}")
-
+logger.debug(f"Grafico salvato in figures /{file_name}")
 
 # Ora crea e allena il modello con i migliori iperparametri
 best_lr = study.best_params['lr']
@@ -287,13 +283,16 @@ train_loader = DataLoader(train_dataset, batch_size=best_batch_size, drop_last=T
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, shuffle=False, drop_last=True)
 
 # Crea il modello con i migliori iperparametri
-best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=9, sliding_window_length=100)
+best_net = DeepConvLSTM(n_classes=len(unique_labels), nb_sensor_channels=13)
 
 # Esegui l'allenamento con i migliori iperparametri
-best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_ball_without_sampler_weighted", f1_average="weighted")
+best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=100, batch_size=best_batch_size, lr=best_lr, figure_name="model_car_without_sampler")
 
 # Salva il miglior modello
-model_save_path = os.path.join(MODELS_DIR, 'best_model_ball_without_sampler_weighted.pth')
+model_save_path = os.path.join(MODELS_DIR, 'best_model_car_without_sampler.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
-print(f"Best model trained without the optimal hyperparameters and saved at {model_save_path}")
+print(f"Best model trained with the optimal hyperparameters and saved at {model_save_path}")
+
+
+"""

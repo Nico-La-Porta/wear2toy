@@ -245,20 +245,20 @@ print("Tipo di test_dataset:", type(test_dataset))
 
 
 def objective(trial):
-    # Definisci gli iperparametri da ottimizzare
+    # DefiniscO gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
     batch_size = trial.suggest_categorical('batch_size', [4,6,8])
 
-    # Crea i DataLoader con il batch_size suggerito
-    #runno di nuovo il train con 5 secondi di finestra 
+    # CreO i DataLoader con il batch_size suggerito
+    
     train_loader = DataLoader(train_dataset, batch_size=batch_size,shuffle=True, drop_last=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
-    # Crea il modello con gli iperparametri suggeriti# Carica il modello preaddestratocd
+    # Crea il modello con gli iperparametri suggeriti 
     model = DeepConvLSTM()
 
-        # Rimuovi la testa originale, in modo da non caricare i pesi associati
-    model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_norm_without_sampler.pth'), strict=False)
+    # Rimuovi la testa originale, in modo da non caricare i pesi associati
+    model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_without_norm_without_sampler_augmented_4_classes.pth'), strict=False)
 
 
     # Ora sostituisco la testa del modello con la nuova dimensione di classi (4)

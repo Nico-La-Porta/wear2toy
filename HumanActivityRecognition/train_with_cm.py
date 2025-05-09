@@ -204,3 +204,61 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
             plt.close()  # Chiude la figura
 
     return best_f1score
+
+
+
+def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False):
+    net.eval()
+    criterion = torch.nn.CrossEntropyLoss()
+    all_test_preds = []
+    all_test_labels = []
+
+    val_losses = []
+    val_accuracy = 0
+    val_f1score = 0
+
+    with torch.no_grad():
+        for inputs, targets in test_loader:
+            batch_size = inputs.size(0)
+            val_h = net.init_hidden(batch_size)
+            val_h = tuple([each.data for each in val_h])
+
+            if train_on_gpu:
+                inputs, targets = inputs.cuda(), targets.cuda()
+
+            output, val_h = net(inputs, val_h, batch_size)
+            loss = criterion(output, targets.long())
+            val_losses.append(loss.item())
+
+            _, predicted = torch.max(output, 1)
+            all_test_preds.extend(predicted.cpu().numpy())
+            all_test_labels.extend(targets.cpu().numpy())
+
+            equals = predicted == targets.long()
+            val_accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
+            val_f1score += f1_score(predicted.cpu(), targets.cpu(), average=f1_average)
+
+    mean_loss = np.mean(val_losses)
+    mean_accuracy = val_accuracy / len(test_loader)
+    mean_f1score = val_f1score / len(test_loader)
+
+    logger.info(f"Evaluation Results - Loss: {mean_loss:.4f}, Accuracy: {mean_accuracy:.4f}, F1-Score: {mean_f1score:.4f}")
+
+    if save_confusion_matrix:
+        cm = confusion_matrix(all_test_labels, all_test_preds)
+        plt.figure(figsize=(16, 13))
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                    xticklabels=test_loader.dataset.classes,
+                    yticklabels=test_loader.dataset.classes,
+                    linewidths=0.5, square=True)
+        plt.title("Confusion Matrix - Evaluation")
+        plt.xlabel("Predicted")
+        plt.ylabel("True")
+        plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_eval_confusion_matrix.png"))
+        plt.close()
+
+    return {
+        "loss": mean_loss,
+        "accuracy": mean_accuracy,
+        "f1score": mean_f1score
+    }

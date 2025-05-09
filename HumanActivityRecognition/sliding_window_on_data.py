@@ -69,6 +69,7 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
     kid_ids = df['kid_id'].unique() # Prendo gli id dei bambini e li metto in una lista
     print(">>> Kid_ids:", kid_ids)
     X, Y, = [], [] 
+    kid_ids_all = [] # Lista per tenere traccia di tutti i kid_id
 
     kid_id_action_count = {} # Dizionario per tenere traccia del numero di finestre per ogni kid
 
@@ -104,6 +105,7 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
 
 
         kid_id_action_count[int(kid_id)] = len(Y_windows) # Salva il numero di finestre per ogni kid
+        kid_ids_all.extend([kid_id] * len(Y_windows)) # Aggiungi il kid_id per ogni finestra
 
         #stampo il numero di finestre che ha ogni azione e stampo quali azioni per ogni kid
         for action_id in np.unique(Y_windows):
@@ -114,10 +116,10 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
     # Concateno le finestre di tutti i bambini
     X_all = np.concatenate(X, axis=0)  # Concateno le finestre per X per tutti i bambini
     Y_all = np.concatenate(Y, axis=0)  # Concateno le finestre per Y per tutti i bambini
-
+    kid_ids_all = np.array(kid_ids_all) # Converto in array numpy
 
     
-    return X_all, Y_all, kid_id_action_count
+    return X_all, Y_all, kid_id_action_count, kid_ids_all
 
 
 
