@@ -88,7 +88,7 @@ test_dataset = HARDataset(X_Test, Y_Test)
 del dataset_train_labled, dataset_test_labled, datasetTracesTrain, datasetTracesTest, X_Train, Y_Train, tranform_1
 
 
-train_sampler = create_weighted_sampler(Y_Train)
+train_sampler = create_weighted_sampler(Y_Train_augmented)
 
 # Definisco i percorsi per i modelli e i migliori risultati
 BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_dl_with_aug_and_sampler.pkl")
@@ -148,7 +148,7 @@ else:
     best_hyperparameters = study.best_params
     best_hyperparameters['best_f1_score'] = study.best_value
     best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_aug_and_sampler'), index=False)
+    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_aug_and_sampler.csv'), index=False)
 
     best_lr = study.best_params['lr']
     best_batch_size = study.best_params['batch_size']
@@ -190,7 +190,12 @@ plot_CM(
 X = np.concatenate(X_Train_augmented, X_Test, axis=0)
 Y = np.concatenate(Y_Train_augmented, Y_Test, axis=0)
 
-model= DeepConvLSTM()
+# Creo un nuovo modello
+model = DeepConvLSTM()
+# Carico i pesi del miglior modello trovato
+model.load_state_dict(torch.load(BEST_MODEL_PATH))
+# Imposto il modello in modalità valutazione
+model.eval()
 
 del X_Train_augmented, X_Test, Y_Train_augmented, Y_Test, train_dataset, test_dataset
 

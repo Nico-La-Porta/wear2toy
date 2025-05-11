@@ -111,7 +111,7 @@ else:
     best_hyperparameters = study.best_params
     best_hyperparameters['best_f1_score'] = study.best_value
     best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_sampler'), index=False)
+    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_sampler.csv'), index=False)
 
     best_lr = study.best_params['lr']
     best_batch_size = study.best_params['batch_size']
@@ -153,7 +153,12 @@ plot_CM(
 X = np.concatenate(X_Train, X_Test, axis=0)
 Y = np.concatenate(Y_Train, Y_Test, axis=0)
 
-model= DeepConvLSTM()
+# Creo un nuovo modello
+model = DeepConvLSTM()
+# Carico i pesi del miglior modello trovato
+model.load_state_dict(torch.load(BEST_MODEL_PATH))
+# Imposto il modello in modalità valutazione
+model.eval()
 
 del X_Train, X_Test, Y_Train, Y_Test, train_dataset, test_dataset
 

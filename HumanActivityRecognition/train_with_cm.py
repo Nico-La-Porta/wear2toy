@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, f1_score
 import seaborn as sns
-from app_config import MODELS_DIR, FIGURES_DIR
+from app_config import MODELS_DIR, FIGURES_DIR, REPORTS_DIR
 from utils import check_gpu
 from utils.log_config import logger
 
@@ -209,7 +209,7 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
 
 
 
-def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False):
+def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False, save_f1_score: bool = True):
     net.eval()
     criterion = torch.nn.CrossEntropyLoss()
     all_test_preds = []
@@ -242,18 +242,51 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
     mean_loss = np.mean(val_losses)
     mean_accuracy = val_accuracy / len(test_loader)
     
-    # Calcolo corretto dell'F1 score su tutti i dati insieme
-    mean_f1score = f1_score(all_test_labels, all_test_preds, average=f1_average)
+    # Calcolo dell'F1 score con diverse strategie
+    f1_scores = {
+        'macro': f1_score(all_test_labels, all_test_preds, average='macro'),
+        'micro': f1_score(all_test_labels, all_test_preds, average='micro'),
+        'weighted': f1_score(all_test_labels, all_test_preds, average='weighted')
+    }
+    
+    # F1-score per classe
+    f1_per_class = f1_score(all_test_labels, all_test_preds, average=None)
 
-    logger.info(f"Evaluation Results - Loss: {mean_loss:.4f}, Accuracy: {mean_accuracy:.4f}, F1-Score: {mean_f1score:.4f}")
+    logger.info(f"Evaluation Results - Loss: {mean_loss:.4f}, Accuracy: {mean_accuracy:.4f}, F1-Score ({f1_average}): {f1_scores[f1_average]:.4f}")
+    # Salvataggio F1-score
+    if save_f1_score:
+        # Assicurati che la directory esista
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        
+        # Rimuovo le prime due lettere dal nome 
+        f1_filename = figure_name[2:] if len(figure_name) > 2 else figure_name
+        f1_file_txt = os.path.join(REPORTS_DIR, f"f1-score_{f1_filename}.txt")
+        
+        # Salvo l'F1-score in TXT
+        with open(f1_file_txt, 'w') as f:
+            f.write(f"F1-Score (Macro): {f1_scores['macro']:.6f}\n")
+            f.write(f"F1-Score (Micro): {f1_scores['micro']:.6f}\n")
+            f.write(f"F1-Score (Weighted): {f1_scores['weighted']:.6f}\n\n")
+            f.write("F1-Score per classe:\n")
+            
+            # Verifica se le classi sono disponibili nel dataset
+            class_names = getattr(test_loader.dataset, 'classes', None)
+            
+            for i, score in enumerate(f1_per_class):
+                class_name = class_names[i] if class_names else f"Class {i}"
+                f.write(f"{class_name}: {score:.6f}\n")
+        
+        logger.info(f"F1-scores saved to: {f1_file_txt}")
 
     if save_confusion_matrix:
         cm = confusion_matrix(all_test_labels, all_test_preds)
-        plt.figure(figsize=(10, 8), dpi=300)  # Dimensione aumentata e alta risoluzione 
+        plt.figure(figsize=(16, 14), dpi=300)
         sns.heatmap(cm, annot=True, fmt="d", cmap="Greys",  # in scala di grigi
                     xticklabels=test_loader.dataset.classes,
                     yticklabels=test_loader.dataset.classes,
-                    linewidths=0.5, square=True, annot_kws={"size": 14})
+                    linewidths=0.3, square=True, annot_kws={"size": 10}, cbar=True)
+        plt.xticks(rotation=45, ha='right', fontsize=12)
+        plt.yticks(rotation=0, fontsize=12)
         plt.title(f"Confusion Matrix - {figure_name}", fontsize=16) 
         plt.xlabel("Predicted", fontsize=16)
         plt.ylabel("True", fontsize=16)
@@ -265,4 +298,4 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
         plt.close()
 
 
-    return mean_loss, mean_accuracy, mean_f1score
+    return mean_loss, mean_accuracy, f1_scores[f1_average]
