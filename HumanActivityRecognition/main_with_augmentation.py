@@ -40,6 +40,11 @@ init_weights.set_seed(42)
 
 # File per salvare i migliori iperparametri
 best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_aug.csv')
+
+
+os.makedirs(MODELS_DIR, exist_ok=True)
+os.makedirs(REPORTS_DIR, exist_ok=True)
+os.makedirs(FIGURES_DIR, exist_ok=True)
     
 # Prepara i dati
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
@@ -84,7 +89,7 @@ print(f"Dimensioni di Y_Train_augmented: {Y_Train_augmented.shape}")
 train_dataset = HARDataset(X_Train_augmented, Y_Train_augmented)
 test_dataset = HARDataset(X_Test, Y_Test)
 
-del dataset_train_labled, dataset_test_labled, datasetTracesTrain, datasetTracesTest, X_Train, Y_Train, tranform_1
+del dataset_train_labled, dataset_test_labled, datasetTracesTrain, datasetTracesTest, tranform_1
 # Definisco i percorsi per i modelli e i migliori risultati
 BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_dl_with_aug.pkl")
 BEST_SCORE_PATH = os.path.join(REPORTS_DIR, "best_score_dl_with_aug.txt")
@@ -170,8 +175,8 @@ else:
 plot_CM(
     mdl_class=DeepConvLSTM,
     mdl_weights=BEST_MODEL_PATH,
-    X=X_Train,
-    Y=Y_Train,
+    X=X_Train_augmented,
+    Y=Y_Train_augmented,
     batch_size=best_batch_size,
     figure_name="cm_train_best_hyp_optuna_dl_with_aug"
 )
@@ -190,8 +195,8 @@ plot_CM(
 
 
 # Concateno i datasets
-X = np.concatenate(X_Train_augmented, X_Test, axis=0)
-Y = np.concatenate(Y_Train_augmented, Y_Test, axis=0)
+X = np.concatenate((X_Train_augmented, X_Test), axis=0)
+Y = np.concatenate((Y_Train_augmented, Y_Test), axis=0)
 
 # Creo un nuovo modello
 model = DeepConvLSTM()

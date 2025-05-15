@@ -150,8 +150,8 @@ plot_CM(
 
 
 # Concateno i datasets
-X = np.concatenate(X_Train, X_Test, axis=0)
-Y = np.concatenate(Y_Train, Y_Test, axis=0)
+X = np.concatenate((X_Train, X_Test), axis=0)
+Y = np.concatenate((Y_Train, Y_Test), axis=0)
 
 # Creo un nuovo modello
 model = DeepConvLSTM()

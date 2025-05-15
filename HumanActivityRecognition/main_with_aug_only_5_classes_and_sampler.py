@@ -30,6 +30,10 @@ from figures import plot_CM
 # Impostazione il seed per la riproducibilità
 init_weights.set_seed(42)
 
+os.makedirs(MODELS_DIR, exist_ok=True)
+os.makedirs(REPORTS_DIR, exist_ok=True)
+os.makedirs(FIGURES_DIR, exist_ok=True)
+
 # File per salvare i migliori iperparametri
 best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_with_aug_only_5_classes_and_sampler.csv')
 BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_dl_with_aug_only_5_classes_and_sampler.pkl")
@@ -182,8 +186,8 @@ else:
 plot_CM(
     mdl_class=DeepConvLSTM,
     mdl_weights=BEST_MODEL_PATH,
-    X=X_Train,
-    Y=Y_Train,
+    X=X_Train_augmented,
+    Y=Y_Train_augmented,
     batch_size=best_batch_size,
     figure_name="cm_train_best_hyp_optuna_dl_with_aug_only_5_classes_and_sampler"
 )
@@ -202,8 +206,8 @@ plot_CM(
 
 
 # Concateno i datasets
-X = np.concatenate(X_Train_augmented, X_Test, axis=0)
-Y = np.concatenate(Y_Train_augmented, Y_Test, axis=0)
+X = np.concatenate((X_Train_augmented, X_Test), axis=0)
+Y = np.concatenate((Y_Train_augmented, Y_Test), axis=0)
 
 # Creo un nuovo modello
 model = DeepConvLSTM()
