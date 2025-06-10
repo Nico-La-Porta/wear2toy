@@ -8,9 +8,7 @@ from app_config import MODELS_DIR, FIGURES_DIR, REPORTS_DIR
 from utils import check_gpu
 from utils.log_config import logger
 
-train_on_gpu=check_gpu.check_gpu_availability()
-
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 """class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
@@ -55,8 +53,8 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
     opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
     criterion = torch.nn.CrossEntropyLoss()
 
-    if train_on_gpu:
-        net.cuda()
+    # Pass the model to the appropriate device (GPU or CPU)
+    net.to(device)
 
     #storicizzo i valori di loss e accuracy
     train_loss_history = [] 
@@ -81,8 +79,7 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
         #calcolo dell'f1-score di train
         train_f1score = 0 #variabile per l'f1-score di train
         for inputs, targets in train_loader: 
-            if train_on_gpu:
-                inputs, targets = inputs.cuda(), targets.cuda()
+            inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
             batch_size = inputs.size(0)
             h = net.init_hidden(batch_size)
             opt.zero_grad()
@@ -116,9 +113,8 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
                 for inputs, targets in test_loader:
                     batch_size = inputs.size(0)
                     val_h = tuple([each.data for each in val_h])
-
-                    if train_on_gpu:
-                        inputs, targets = inputs.cuda(), targets.cuda()
+                    net.to(device)
+                    inputs, targets = inputs.to(device), targets.to(device)
 
                     output, val_h = net(inputs, val_h, batch_size)
                     val_loss = criterion(output, targets.long())
@@ -223,9 +219,9 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
             batch_size = inputs.size(0)
             val_h = net.init_hidden(batch_size)
             val_h = tuple([each.data for each in val_h])
+            net.to(device)
 
-            if train_on_gpu:
-                inputs, targets = inputs.cuda(), targets.cuda()
+            inputs, targets = inputs.to(device), targets.to(device)
 
             output, val_h = net(inputs, val_h, batch_size)
             loss = criterion(output, targets.long())
