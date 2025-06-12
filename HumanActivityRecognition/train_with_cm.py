@@ -4,11 +4,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, f1_score
 import seaborn as sns
-from app_config import MODELS_DIR, FIGURES_DIR
+from app_config import MODELS_DIR, FIGURES_DIR, REPORTS_DIR
 from utils import check_gpu
 from utils.log_config import logger
 
-train_on_gpu=check_gpu.check_gpu_availability()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 """class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
@@ -53,8 +53,8 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
     opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
     criterion = torch.nn.CrossEntropyLoss()
 
-    if train_on_gpu:
-        net.cuda()
+    # Pass the model to the appropriate device (GPU or CPU)
+    net.to(device)
 
     #storicizzo i valori di loss e accuracy
     train_loss_history = [] 
@@ -79,8 +79,7 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
         #calcolo dell'f1-score di train
         train_f1score = 0 #variabile per l'f1-score di train
         for inputs, targets in train_loader: 
-            if train_on_gpu:
-                inputs, targets = inputs.cuda(), targets.cuda()
+            inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
             batch_size = inputs.size(0)
             h = net.init_hidden(batch_size)
             opt.zero_grad()
@@ -114,9 +113,8 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
                 for inputs, targets in test_loader:
                     batch_size = inputs.size(0)
                     val_h = tuple([each.data for each in val_h])
-
-                    if train_on_gpu:
-                        inputs, targets = inputs.cuda(), targets.cuda()
+                    net.to(device)
+                    inputs, targets = inputs.to(device), targets.to(device)
 
                     output, val_h = net(inputs, val_h, batch_size)
                     val_loss = criterion(output, targets.long())
@@ -207,7 +205,7 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
 
 
 
-def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False):
+def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False, save_f1_score: bool = True):
     net.eval()
     criterion = torch.nn.CrossEntropyLoss()
     all_test_preds = []
@@ -215,16 +213,15 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
 
     val_losses = []
     val_accuracy = 0
-    val_f1score = 0
 
     with torch.no_grad():
         for inputs, targets in test_loader:
             batch_size = inputs.size(0)
             val_h = net.init_hidden(batch_size)
             val_h = tuple([each.data for each in val_h])
+            net.to(device)
 
-            if train_on_gpu:
-                inputs, targets = inputs.cuda(), targets.cuda()
+            inputs, targets = inputs.to(device), targets.to(device)
 
             output, val_h = net(inputs, val_h, batch_size)
             loss = criterion(output, targets.long())
@@ -236,29 +233,65 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
 
             equals = predicted == targets.long()
             val_accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
-            val_f1score += f1_score(predicted.cpu(), targets.cpu(), average=f1_average)
 
+    # Calcolo del mean_loss e mean_accuracy 
     mean_loss = np.mean(val_losses)
     mean_accuracy = val_accuracy / len(test_loader)
-    mean_f1score = val_f1score / len(test_loader)
+    
+    # Calcolo dell'F1 score con diverse strategie
+    f1_scores = {
+        'macro': f1_score(all_test_labels, all_test_preds, average='macro'),
+        'micro': f1_score(all_test_labels, all_test_preds, average='micro'),
+        'weighted': f1_score(all_test_labels, all_test_preds, average='weighted')
+    }
+    
+    # F1-score per classe
+    f1_per_class = f1_score(all_test_labels, all_test_preds, average=None)
 
-    logger.info(f"Evaluation Results - Loss: {mean_loss:.4f}, Accuracy: {mean_accuracy:.4f}, F1-Score: {mean_f1score:.4f}")
+    logger.info(f"Evaluation Results - Loss: {mean_loss:.4f}, Accuracy: {mean_accuracy:.4f}, F1-Score ({f1_average}): {f1_scores[f1_average]:.4f}")
+    # Salvataggio F1-score
+    if save_f1_score:
+        # Assicurati che la directory esista
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        
+        # Rimuovo le prime due lettere dal nome 
+        f1_filename = figure_name[2:] if len(figure_name) > 2 else figure_name
+        f1_file_txt = os.path.join(REPORTS_DIR, f"f1-score_{f1_filename}.txt")
+        
+        # Salvo l'F1-score in TXT
+        with open(f1_file_txt, 'w') as f:
+            f.write(f"F1-Score (Macro): {f1_scores['macro']:.6f}\n")
+            f.write(f"F1-Score (Micro): {f1_scores['micro']:.6f}\n")
+            f.write(f"F1-Score (Weighted): {f1_scores['weighted']:.6f}\n\n")
+            f.write("F1-Score per classe:\n")
+            
+            # Verifica se le classi sono disponibili nel dataset
+            class_names = getattr(test_loader.dataset, 'classes', None)
+            
+            for i, score in enumerate(f1_per_class):
+                class_name = class_names[i] if class_names else f"Class {i}"
+                f.write(f"{class_name}: {score:.6f}\n")
+        
+        logger.info(f"F1-scores saved to: {f1_file_txt}")
 
     if save_confusion_matrix:
         cm = confusion_matrix(all_test_labels, all_test_preds)
-        plt.figure(figsize=(16, 13))
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+        plt.figure(figsize=(16, 14), dpi=300)
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Greys",  # in scala di grigi
                     xticklabels=test_loader.dataset.classes,
                     yticklabels=test_loader.dataset.classes,
-                    linewidths=0.5, square=True)
-        plt.title("Confusion Matrix - Evaluation")
-        plt.xlabel("Predicted")
-        plt.ylabel("True")
-        plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_eval_confusion_matrix.png"))
+                    linewidths=0.3, square=True, annot_kws={"size": 10}, cbar=True)
+        plt.xticks(rotation=45, ha='right', fontsize=12)
+        plt.yticks(rotation=0, fontsize=12)
+        plt.title(f"Confusion Matrix - {figure_name}", fontsize=16) 
+        plt.xlabel("Predicted", fontsize=16)
+        plt.ylabel("True", fontsize=16)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.tight_layout()  
+        plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_eval_confusion_matrix.png"), 
+                    bbox_inches='tight', dpi=300)  # Salvataggio in alta qualità
         plt.close()
 
-    return {
-        "loss": mean_loss,
-        "accuracy": mean_accuracy,
-        "f1score": mean_f1score
-    }
+
+    return mean_loss, mean_accuracy, f1_scores[f1_average]

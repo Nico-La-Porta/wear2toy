@@ -127,8 +127,8 @@ else:
     )
     study.optimize(objective, n_trials=100)
 
-    logger.info("Best hyperparameters: ", study.best_params)
-    logger.info("Highest F1-score: ", study.best_value)
+    logger.info(f"Highest F1-score: {study.best_value}")
+    logger.info(f"Best hyperparameters: {study.best_params}")
 
     #salvo i best hyperparameters
     best_hyperparameters = study.best_params
@@ -173,10 +173,15 @@ plot_CM(
 
 
 # Concateno i datasets
-X = np.concatenate(X_Train, X_Test, axis=0)
-Y = np.concatenate(Y_Train, Y_Test, axis=0)
+X = np.concatenate((X_Train, X_Test), axis=0)
+Y = np.concatenate((Y_Train, Y_Test), axis=0)
 
-model= DeepConvLSTM()
+# Creo un nuovo modello
+model = DeepConvLSTM()
+# Carico i pesi del miglior modello trovato
+model.load_state_dict(torch.load(BEST_MODEL_PATH))
+# Imposto il modello in modalità valutazione
+model.eval()
 
 del X_Train, X_Test, Y_Train, Y_Test, train_dataset, test_dataset
 

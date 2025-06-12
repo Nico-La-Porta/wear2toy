@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from sklearn.metrics import f1_score
 import matplotlib.pyplot as plt
 from pathlib import Path
 from torch.utils.data import DataLoader
@@ -70,6 +71,16 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y: np.ndarray, batch_siz
                 all_preds.extend(preds.cpu().numpy())
                 all_labels.extend(labels.cpu().numpy())  
 
+        # Calcolo dell'F1-score
+        f1_scores = {
+            'macro': f1_score(all_labels, all_preds, average='macro'),
+            'micro': f1_score(all_labels, all_preds, average='micro'),
+            'weighted': f1_score(all_labels, all_preds, average='weighted')
+        }
+
+        # Per classe
+        f1_per_class = f1_score(all_labels, all_preds, average=None)
+
         # Salvataggio delle predizioni in un file CSV
         os.makedirs(REPORTS_DIR, exist_ok=True)  # Assicura che la directory per i risultati esista
         predictions_file = os.path.join(REPORTS_DIR, f"{figure_name}_predictions.csv")
@@ -89,6 +100,24 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y: np.ndarray, batch_siz
         predictions_df.to_csv(predictions_file, index=False)
         logger.info(f"Predictions saved to: {predictions_file}")
 
+        # Salvo l'F1-score in un file TXT
+        # Rimuovo le prime due lettere dal nome della figura
+        f1_filename = figure_name[2:] if len(figure_name) > 2 else figure_name
+        f1_file_txt = os.path.join(REPORTS_DIR, f"f1-score_{f1_filename}.txt")
+
+        with open(f1_file_txt, 'w') as f:
+            f.write(f"F1-Score (Macro): {f1_scores['macro']:.6f}\n")
+            f.write(f"F1-Score (Micro): {f1_scores['micro']:.6f}\n")
+            f.write(f"F1-Score (Weighted): {f1_scores['weighted']:.6f}\n\n")
+            f.write("F1-Score per classe:\n")
+            for i, score in enumerate(f1_per_class):
+                class_name = labels_dict[i] if labels_dict else f"Class {i}"
+                f.write(f"{class_name}: {score:.6f}\n")
+        
+        logger.info(f"F1-scores saved to: {f1_file_txt}")
+
+        
+
         # Matrice di confusione
         cm = confusion_matrix(all_labels, all_preds)
 
@@ -102,18 +131,26 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y: np.ndarray, batch_siz
         os.makedirs(FIGURES_DIR, exist_ok=True)
 
         # Plot
-        plt.figure(figsize=(16, 13))
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=labels_names, yticklabels=labels_names, linewidths=0.5, square=True)
-        plt.title(f"Confusion Matrix - {figure_name}")
-        plt.xlabel("Predicted")
-        plt.ylabel("True")
-        plt.tight_layout()
+        plt.figure(figsize=(10, 8), dpi=300)
+        plt.figure(figsize=(16, 14), dpi=300)
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Greys", 
+            xticklabels=labels_names, yticklabels=labels_names,
+            linewidths=0.3, square=True, annot_kws={"size": 10}, cbar=True)
+
+        plt.xticks(rotation=45, ha='right', fontsize=12)
+        plt.yticks(rotation=0, fontsize=12)
+        plt.title(f"Confusion Matrix - {figure_name}", fontsize=16) 
+        plt.xlabel("Predicted", fontsize=16)
+        plt.ylabel("True", fontsize=16)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.tight_layout()  
 
         # Salvataggio
-        save_path = os.path.join(FIGURES_DIR, f"{figure_name}_CM.png")
-        plt.savefig(save_path)
+        plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}.png"), 
+                    bbox_inches='tight', dpi=300)  # Salvataggio in alta qualità
         plt.close()
-        logger.info(f"Confusion Matrix saved to: {save_path}")
+        logger.info(f"Confusion Matrix saved")
         
         return cm, predictions_df  # Restituisco sia la matrice di confusione che le predizioni
     except FileNotFoundError:
@@ -122,4 +159,3 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y: np.ndarray, batch_siz
     except Exception as e:
         logger.error(f"Si è verificato un errore durante la creazione della matrice di confusione: {str(e)}")
         return None, None
-
