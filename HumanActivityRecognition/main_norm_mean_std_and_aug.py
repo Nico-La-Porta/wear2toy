@@ -23,13 +23,15 @@ from utils import data_preprocessing, init_weights
 from run_config import SLIDING_WINDOW_LENGTH, NB_SENSOR_CHANNELS, SLIDING_WINDOW_STEP
 from models.DeepConvLSTM import DeepConvLSTM, HARDataset
 from figures import plot_CM
+from utils.transformations import *
+from utils.transformations_utils import *
 
 # Impostazione il seed per la riproducibilità
 init_weights.set_seed(42)
 
 # Definisco i percorsi per i modelli e i migliori risultati
-BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_dl_norm_mean_std_without_sampler.pkl")
-BEST_SCORE_PATH = os.path.join(REPORTS_DIR, "best_score_dl_norm_mean_std_without_sampler.txt")
+BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_dl_norm_mean_std_and_aug.pkl")
+BEST_SCORE_PATH = os.path.join(REPORTS_DIR, "best_score_dl_norm_mean_std_and_aug.txt")
     
 # Prepara i dati
 datasetTracesTrain = data_preprocessing.build_dataset(RAW_DATA_DIR_TRAIN)
@@ -67,12 +69,43 @@ X_Train, Y_Train = sliding_window_on_data.apply_sliding_window(scaled_train_data
 X_Test, Y_Test = sliding_window_on_data.apply_sliding_window(scaled_test_data, SLIDING_WINDOW_LENGTH, SLIDING_WINDOW_STEP, NB_SENSOR_CHANNELS)
 
 del scaled_train_data, scaled_test_data
+print(X_Train.shape)
+
+#DATA AUGUMENTATION
+transform_funcs = [
+    # transformations.scaling_transform_vectorized, # Use Scaling trasnformation
+    noise_transform_vectorized, # Use rotation trasnformation
+    scaling_transform_vectorized,
+    #rotation_transform_vectorized,
+    #axis_angle_to_rotation_matrix_3d_vectorized,
+    negate_transform_vectorized,
+    time_flip_transform_vectorized,
+    channel_shuffle_transform_vectorized,
+    #time_segment_permutation_transform_improved,
+    #get_cubic_spline_interpolation,
+    time_warp_transform_improved,
+    time_warp_transform_low_cost,
+]
+transformation_function = generate_composite_transform_function_simple(transform_funcs)
+
+tranform_1 = transformation_function(X_Train)
+X_Train.shape, tranform_1.shape
+
+
+print(f"Dimensioni di X_Train: {X_Train.shape}")
+print(f"Dimensioni di Y_Train: {Y_Train.shape}")
+X_Train_augmented = np.concatenate((X_Train, tranform_1), axis=0)
+Y_Train_augmented = np.concatenate((Y_Train, Y_Train), axis=0)
+print(f"Dimensioni di X_Train_augmented: {X_Train_augmented.shape}")
+print(f"Dimensioni di Y_Train_augmented: {Y_Train_augmented.shape}")
 
 # Creazione dataset
-train_dataset = HARDataset(X_Train, Y_Train)
+train_dataset = HARDataset(X_Train_augmented, Y_Train_augmented)
 test_dataset = HARDataset(X_Test, Y_Test)
 
-best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_mean_std_without_sampler.csv')
+del datasetTracesTrain, datasetTracesTest, X_Train, Y_Train, tranform_1
+
+best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_mean_std_and_aug.csv')
 if os.path.exists(best_hyperparams_file):
     logger.debug(f"Carico i migliori iperparametri da {best_hyperparams_file}")
     best_hyperparameters=pd.read_csv(best_hyperparams_file).iloc[0].to_dict()
@@ -133,13 +166,13 @@ else:
     best_hyperparameters = study.best_params
     best_hyperparameters['best_f1_score'] = study.best_value
     best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_mean_std_without_sampler.csv'), index=False)
+    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_dl_norm_mean_std_and_aug.csv'), index=False)
 
     best_lr = study.best_params['lr']
     best_batch_size = study.best_params['batch_size']
     #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
     # è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
-    file_name = "optimization_history_dl_norm_mean_std_without_sampler.png"
+    file_name = "optimization_history_dl_norm_mean_std_and_aug.png"
     fig=vis.plot_optimization_history(study)
     plt.show()
 
@@ -152,10 +185,10 @@ else:
 plot_CM(
     mdl_class=DeepConvLSTM,
     mdl_weights=BEST_MODEL_PATH,
-    X=X_Train,
-    Y=Y_Train,
+    X=X_Train_augmented,
+    Y=Y_Train_augmented,
     batch_size=best_batch_size,
-    figure_name="cm_train_best_hyp_optuna_dl_norm_mean_std_without_sampler"
+    figure_name="cm_train_best_hyp_optuna_dl_norm_mean_std_and_aug"
 )
 
 #STAMPO CM DELL'ALLENAMENTO SUL TESTING SET
@@ -166,14 +199,14 @@ plot_CM(
     X=X_Test,
     Y=Y_Test,
     batch_size=best_batch_size,
-    figure_name="cm_test_best_hyp_optuna_dl_norm_mean_std_without_sampler"
+    figure_name="cm_test_best_hyp_optuna_dl_norm_mean_std_and_aug"
 )
     
 
 
 # Concateno i datasets
-X = np.concatenate((X_Train, X_Test), axis=0)
-Y = np.concatenate((Y_Train, Y_Test), axis=0)
+X = np.concatenate((X_Train_augmented, X_Test), axis=0)
+Y = np.concatenate((Y_Train_augmented, Y_Test), axis=0)
 
 # Creo un nuovo modello
 model = DeepConvLSTM()
@@ -182,13 +215,13 @@ model.load_state_dict(torch.load(BEST_MODEL_PATH))
 # Imposto il modello in modalità valutazione
 model.eval()
 
-del X_Train, X_Test, Y_Train, Y_Test, train_dataset, test_dataset
+del X_Train_augmented, X_Test, Y_Train_augmented, Y_Test, train_dataset, test_dataset
 
 # Creo dataloader
 complete_dataset = HARDataset(X, Y)
 complete_dataloader = DataLoader(complete_dataset, batch_size=best_batch_size, drop_last=True, shuffle=True)
 
 # Eseguo l'eval sul tutto il dataset usando i migliori iperparametri
-test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(model, complete_dataloader, figure_name= "cm_final_eval_best_hyp_optuna_dl_norm_mean_std_without_sampler", save_confusion_matrix=True)
+test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(model, complete_dataloader, figure_name= "cm_final_eval_best_hyp_optuna_dl_norm_mean_std_and_aug", save_confusion_matrix=True)
 
 logger.info(f"Best model trained with the optimal hyperparameters")
