@@ -181,3 +181,7 @@ HumanActivityRecognition/cm_all classes/*
 HumanActivityRecognition/cm_repl_without_0_15_16/*
 notebooks/*
 har_dl.sif
+
+models/*
+reports/figures/*
+

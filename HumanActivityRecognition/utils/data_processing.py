@@ -228,3 +228,7 @@ def old_sliding_window(a,ws,ss = None,flatten = True):
     # remove any dimensions with size 1
 #     dim = filter(lambda i : i != 1,dim)
     return strided.reshape(dim)
+
+
+
+

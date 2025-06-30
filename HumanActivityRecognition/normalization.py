@@ -1,0 +1,127 @@
+import numpy as np
+import os
+from typing import Tuple,List, Dict, Any
+import sys
+from app_config import PROJ_ROOT
+sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
+
+from utils.log_config import logger
+
+def concatenate_recordings(dataset_labeled):
+    # Verifico che il dataset non sia vuoto
+    if not dataset_labeled:
+        return None
+    
+    all_data = []
+    
+    # Itero su ogni traccia nel dataset
+    for trace in dataset_labeled:
+        # Aggiungo i dati di questa traccia alla lista all_data
+        all_data.append(trace['TraceData'])
+    
+    # Concateno tutti i dati lungo l'asse 0 (righe)
+    concatenated_data = np.vstack(all_data)
+    
+    return concatenated_data
+
+
+def compute_global_median_iqr(concatenated_data: np.ndarray)-> Tuple[np.ndarray, np.ndarray]:
+    features = concatenated_data[:, :-1]  # escludo l'ultima colonna (activity)
+    logger.debug(f"Shape of features: {features.shape}")
+    medians = np.median(features, axis=0)
+    logger.debug(f"Shape of medians: {medians.shape}")
+    q75 = np.percentile(features, 75, axis=0)
+    q25 = np.percentile(features, 25, axis=0)
+    iqr = q75 - q25
+    iqr[iqr == 0] = 1e-6  # per evitare divisioni per zero
+    logger.debug(f"Shape of IQR: {iqr.shape}")
+    return medians, iqr
+
+
+
+def compute_mean_std(trs_data: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calcola la media e la deviazione standard per ogni colonna (feature) del TRS.
+    L'ultima colonna (activity) viene esclusa.
+    """
+    features = trs_data[:, :-1]
+    logger.debug(f"Shape of TRS features: {features.shape}")
+    
+    means = np.mean(features, axis=0)
+    stds = np.std(features, axis=0)
+    stds[stds == 0] = 1e-6  # evita divisione per zero
+    
+    logger.debug(f"Means shape: {means.shape}, Stds shape: {stds.shape}")
+    return means, stds
+
+
+
+def normalize_each_recording_med_iqr(dataset_labeled: List[Dict[str, Any]], medians: np.ndarray, iqr: np.ndarray) -> List[Dict[str, Any]]:
+    normalized_dataset = []
+
+    for trace in dataset_labeled:
+        data = trace['TraceData']
+        features = data[:, :-1]  # dati senza activity
+        activity_col = data[:, -1].reshape(-1, 1)  # solo la colonna activity per poi ricombinarla 
+
+        # Normalizzazione robusta
+        normalized_features = (features - medians) / iqr # sottraggo la mediana globale dalla colonna corrispondente
+        logger.debug(f"Shape of normalized features: {normalized_features.shape}")
+
+        # Ricombino con activity
+        normalized_data = np.hstack((normalized_features, activity_col)) ## ricombino i dati normalizzati con la colonna activity
+        logger.debug(f"Shape of normalized data: {normalized_data.shape}")
+        new_trace = trace.copy() # creo una copia della traccia originale
+        new_trace['TraceData'] = normalized_data # sostituisco i dati originali con quelli normalizzati
+        normalized_dataset.append(new_trace)
+
+    return normalized_dataset
+
+
+def normalize_each_recording_mean_std(dataset_labeled: List[Dict[str, Any]], 
+                              means: np.ndarray, 
+                              stds: np.ndarray) -> List[Dict[str, Any]]:
+    """
+    Normalizza ogni traccia (TraceData) usando le statistiche (media e std) calcolate sul TRS.
+    """
+    normalized_dataset = []
+    for trace in dataset_labeled:
+        data = trace['TraceData']
+        features = data[:, :-1]
+        activity_col = data[:, -1].reshape(-1, 1)
+
+        normalized_features = (features - means) / stds
+        logger.debug(f"Normalized features shape: {normalized_features.shape}")
+
+        normalized_data = np.hstack((normalized_features, activity_col))
+        new_trace = trace.copy()
+        new_trace['TraceData'] = normalized_data
+        normalized_dataset.append(new_trace)
+
+    return normalized_dataset
+
+
+# Esempio di testing
+if __name__ == "__main__":
+    # Dati di esempio
+    dataset_labeled = [
+        {'TraceData': np.array([[0.1, 0.2, 0.3, 1],
+                               [0.2, 0.3, 0.4, 2],
+                               [0.3, 0.4, 0.5, 1]])},  # prima traccia
+        {'TraceData': np.array([[0.5, 0.6, 0.7, 2],
+                               [0.6, 0.7, 0.8, 1],
+                               [0.7, 0.8, 0.9, 2]])}   # seconda traccia 
+    ]
+    
+    # Concateno i dati
+    concatenated_data = concatenate_recordings(dataset_labeled)
+    logger.info(f"Concatenated Data Shape: {concatenated_data.shape}")
+    
+    # Calcolo la mediana e l'IQR globali
+    medians, iqr = compute_global_median_iqr(concatenated_data)
+    logger.info(f"Medians: {medians}")
+    logger.info(f"IQR: {iqr}")
+    
+    # Normalizzo i dati
+    normalized_dataset = normalize_each_recording_med_iqr(dataset_labeled, medians, iqr)
+    logger.info(f"Normalized Data: {normalized_dataset[0]['TraceData']}")

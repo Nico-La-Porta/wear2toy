@@ -152,3 +152,4 @@ def old_process_csv(file_path, nb_sensor_channels, sliding_window_length, slidin
     print("Shape di Y_windows:", Y_windows.shape)
     
     return X_windows, Y_windows
+

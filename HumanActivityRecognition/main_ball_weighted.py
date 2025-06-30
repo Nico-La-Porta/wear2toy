@@ -70,7 +70,7 @@ else:
         if not file.endswith('.csv'):
             continue
     
-        #leggo solo i file che dopo l'undescore ha BE*.csv
+        #leggo solo i file che dopo l'undescore ha BA*.csv
         if file.split('_')[-1].startswith('C') and file.endswith('.csv'): #controllo che il file termini con .csv
             df_temp=pd.read_csv(os.path.join(path,file))
             df_temp = df_temp[df_temp['action_id'] != 0]
@@ -141,7 +141,11 @@ Y_train = []
 X_test = []
 Y_test = []
 
-"""for action in unique_actions:
+#trovo le azioni uniche
+unique_actions = np.unique(Y)
+print("Azioni uniche:", unique_actions)
+
+for action in unique_actions:
 
     #trovo gli indici delle finestre corrispondenti a ciascuna azione
     action_indices = np.where(Y == action)[0]
@@ -211,7 +215,7 @@ print("Nuove etichette train:", np.unique(Y_train_mapped))
 print("Nuove etichette test:", np.unique(Y_test_mapped))
 
 
-# Creo i dataset per il training e il test
+# Creo i dataset per il training val e test
 train_dataset = HARDataset(X_train, Y_train_mapped)
 test_dataset = HARDataset(X_test, Y_test_mapped)
 
@@ -229,7 +233,7 @@ print("Tipo di test_dataset:", type(test_dataset))
 def objective(trial):
     # Definisci gli iperparametri da ottimizzare
     lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-    batch_size = trial.suggest_categorical('batch_size', [8, 12, 16])
+    batch_size = trial.suggest_categorical('batch_size', [2,4,8])
 
     # Crea i DataLoader con il batch_size suggerito
     #runno di nuovo il train con 5 secondi di finestra 
@@ -292,4 +296,4 @@ best_f1_score = train_with_cm.train(best_net, train_loader, test_loader, epochs=
 model_save_path = os.path.join(MODELS_DIR, 'best_model_ball_without_sampler_weighted.pth')
 torch.save(best_net.state_dict(), model_save_path)
 
-print(f"Best model trained without the optimal hyperparameters and saved at {model_save_path}")"""
+print(f"Best model trained without the optimal hyperparameters and saved at {model_save_path}")
