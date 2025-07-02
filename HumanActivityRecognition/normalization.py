@@ -6,6 +6,7 @@ from app_config import PROJ_ROOT
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 
 from utils.log_config import logger
+import pandas as pd
 
 def concatenate_recordings(dataset_labeled):
     # Verifico che il dataset non sia vuoto
@@ -101,6 +102,46 @@ def normalize_each_recording_mean_std(dataset_labeled: List[Dict[str, Any]],
     return normalized_dataset
 
 
+
+def normalize_dataframe_mean_std(df: 'pd.DataFrame', means: np.ndarray, stds: np.ndarray) -> 'pd.DataFrame':
+    """
+    Normalizza un DataFrame usando le statistiche (media e std) calcolate sul TRS.
+    
+    Args:
+        df: DataFrame pandas con i dati dei sensori
+        means: Array delle medie per la normalizzazione
+        stds: Array delle deviazioni standard per la normalizzazione
+    
+    Returns:
+        DataFrame normalizzato
+    """
+    import pandas as pd
+    
+    # Identifico le colonne delle feature (sensori)
+    sensor_columns = [col for col in df.columns if col in [
+        'Accel_LN_X', 'Accel_LN_Y', 'Accel_LN_Z',
+        'Gyro_X', 'Gyro_Y', 'Gyro_Z', 'Mag_X', 'Mag_Y', 'Mag_Z'
+    ]]
+    
+    # Verifico che abbiamo il numero corretto di feature
+    if len(sensor_columns) != len(means):
+        logger.warning(f"Numero di colonne sensori ({len(sensor_columns)}) diverso da numero di medie ({len(means)})")
+        # PrendO solo le prime len(means) colonne
+        sensor_columns = sensor_columns[:len(means)]
+    
+    # CopiO il DataFrame per non modificare l'originale
+    df_normalized = df.copy()
+    
+    # NormalizzO solo le colonne dei sensori
+    for i, col in enumerate(sensor_columns):
+        if i < len(means):
+            df_normalized[col] = (df[col] - means[i]) / stds[i]
+            logger.debug(f"Normalizzata colonna {col} usando mean={means[i]:.6f}, std={stds[i]:.6f}")
+    
+    logger.info(f"DataFrame normalizzato - Shape: {df_normalized.shape}")
+    return df_normalized
+
+
 # Esempio di testing
 if __name__ == "__main__":
     # Dati di esempio
@@ -125,3 +166,5 @@ if __name__ == "__main__":
     # Normalizzo i dati
     normalized_dataset = normalize_each_recording_med_iqr(dataset_labeled, medians, iqr)
     logger.info(f"Normalized Data: {normalized_dataset[0]['TraceData']}")
+
+    
