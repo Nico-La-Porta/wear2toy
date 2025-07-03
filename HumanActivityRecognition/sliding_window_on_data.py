@@ -72,11 +72,12 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
     kid_ids = df['kid_id'].unique() # Prendo gli id dei bambini e li metto in una lista
     print(">>> Kid_ids:", kid_ids)
     X, Y, = [], [] 
+    kid_ids_all= []  # Lista per tenere traccia di tutti i kid_id
 
     kid_id_action_count = {} # Dizionario per tenere traccia del numero di finestre per ogni kid
 
     for kid_id in kid_ids:
-        X_kid = df[df['kid_id'] == kid_id].drop(columns=['Timestamp', 'Mag_X', 'Mag_Y', 'Mag_Z','Date_time', 'action', 'action_id', 'G',
+        X_kid = df[df['kid_id'] == kid_id].drop(columns=['Timestamp', 'Accel_WR_X' ,'Accel_WR_Y' ,'Accel_WR_Z' ,'Date_time', 'action', 'action_id', 'G',
                               'communication', 'social_interaction', 'restricted_repetitive_behaviour',
                               'ados_total_score', 'I', 'E', 'toy_id','kid_id']).to_numpy() #
         Y_kid = df[df['kid_id'] == kid_id]['action_id'].to_numpy() #
@@ -85,14 +86,18 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
         logger.info(f"Kid_id: {kid_id}, X_kid shape: {X_kid.shape}, Y_kid shape: {Y_kid.shape}")
 
         # Applicazione della sliding window
-        X_windows = data_processing.sliding_window(X_kid, ws=(sliding_window_length, X_kid.shape[1]), ss=(sliding_window_step, X_kid.shape[1]), min_pad_samples=30, extreme_pad_samples=10)
+        X_windows, padding_codes_x= data_processing.sliding_window(X_kid, ws=(sliding_window_length, X_kid.shape[1]), ss=(sliding_window_step, X_kid.shape[1]), min_pad_samples=30, extreme_pad_samples=10)
+        logger.debug(f"X_windows shape after sliding window: {X_windows.shape}")
+        logger.debug(f"Padding codes for X: {padding_codes_x}")
         #prendo la prima etichetta non nulla di ogni finestra
-        Y_windows_full = data_processing.sliding_window(Y_kid.reshape(-1, 1), ws=(sliding_window_length, 1), ss=(sliding_window_step, 1), min_pad_samples=30, extreme_pad_samples=10)
-        Y_windows = np.asarray([next(value for value in reversed(window) if value != 0) for window in Y_windows_full])  # Prende la prima etichetta non nulla di ogni finestra
+        Y_windows_full, padding_codes_y = data_processing.sliding_window(Y_kid.reshape(-1, 1), ws=(sliding_window_length, 1), ss=(sliding_window_step, 1), min_pad_samples=30, extreme_pad_samples=10)
+        logger.debug(f"Y_windows_full shape after sliding window: {Y_windows_full.shape}")
+        logger.debug(f"Padding codes for Y: {padding_codes_y}")
+        # Estraggo l'ultima etichetta di ogni finestra
+        Y_windows = np.asarray([window[np.nonzero(window)[0][0]] if np.any(window != 0) else 0 for window in Y_windows_full])
+        logger.debug(f"Y_windows shape after extraction: {Y_windows.shape}")
 
         
-        logger.info(f"X_windows shape before reshape: {X_windows.shape}")
-        logger.info(f"Y_windows shape: {Y_windows.shape}")
         # Reshape per Conv1D
         #X_windows = X_windows.reshape((-1, sliding_window_length, nb_sensor_channels))
 
@@ -103,6 +108,7 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
 
 
         kid_id_action_count[int(kid_id)] = len(Y_windows) # Salva il numero di finestre per ogni kid
+        kid_ids_all.extend([kid_id]* len(Y_windows))  # Aggiungi il kid_id per ogni finestra
 
         #stampo il numero di finestre che ha ogni azione e stampo quali azioni per ogni kid
         for action_id in np.unique(Y_windows):
@@ -113,10 +119,11 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
     # Concateno le finestre di tutti i bambini
     X_all = np.concatenate(X, axis=0)  # Concateno le finestre per X per tutti i bambini
     Y_all = np.concatenate(Y, axis=0)  # Concateno le finestre per Y per tutti i bambini
+    kid_ids_all = np.array(kid_ids_all)  # Converti in array numpy
 
 
     
-    return X_all, Y_all, kid_id_action_count
+    return X_all, Y_all, kid_id_action_count, kid_ids_all  
 
 
 
@@ -152,3 +159,4 @@ def old_process_csv(file_path, nb_sensor_channels, sliding_window_length, slidin
     print("Shape di Y_windows:", Y_windows.shape)
     
     return X_windows, Y_windows
+

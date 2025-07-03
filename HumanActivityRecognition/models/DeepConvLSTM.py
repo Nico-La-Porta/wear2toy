@@ -44,13 +44,31 @@ def collate_fn(batch):
 
 
 #prende in input le eutichette y
-def create_weighted_sampler(Y):
+"""def create_weighted_sampler(Y):
     #conta quante volte ciascuna etichetta appare
     unique_labels, counts = np.unique(Y, return_counts=True)
     weights = 1.0 / counts #calcola pesi inversamente proporzionali al numero di occorrenze delle etichette
     sample_weights = np.array([weights[label] for label in Y]) #arrai dove ogni elemento è il peso corrispondente all'etichetta in y 
     sampler = WeightedRandomSampler(sample_weights, len(sample_weights),replacement=True) #seleziona i campioni in modo causale ma con una probabilità proporzionale ai pesi specificati
-    return sampler #ritorna sampler che può essere utilizzato nel dataloder per bilanciare il dataset durante l'addestramento
+    return sampler""" #ritorna sampler che può essere utilizzato nel dataloder per bilanciare il dataset durante l'addestramento
+
+
+def create_weighted_sampler(Y):
+    # Conto le occorrenze di ciascuna etichetta
+    unique_labels, counts = np.unique(Y, return_counts=True)
+
+    # Calcolo i pesi come radice quadrata (per evitare overiffing)
+    weights = np.sqrt(1.0 / counts)
+
+    #normalizzo i pesi in modo da avere una somma pari al numero di classi, questo mi permette di avere un bilanciamento 
+    weights = weights / np.sum(weights) * len(unique_labels)
+
+    weights_dict = {label: weight for label, weight in zip(unique_labels, weights)} # creo un dizionario che associa a ciascuna etichetta il suo peso
+    sample_weights = np.array([weights_dict[label] for label in Y]) #creo un array di pesi per ciascun campione in Y =>ASSOCIA a ciascun campione il peso corrispondente alla sua etichetta
+    # Crea il sampler
+    sampler = WeightedRandomSampler(sample_weights, len(sample_weights), replacement=True)
+    
+    return sampler
 
 class DeepConvLSTM(nn.Module):
     

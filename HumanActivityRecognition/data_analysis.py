@@ -12,7 +12,10 @@ from run_config import SLIDING_WINDOW_STEP
 import sliding_window_on_data
 from app_config import FIGURES_DIR
 import json
+from typing import Dict, List, Any
+from utils.log_config import logger
 
+from scipy.stats import kstest, norm
 
 # Funzione per calcolare e rappresentare la distribuzione delle etichette
 def plot_label_distribution(dataset,dataset_type="train",save_dir="figures"):
@@ -48,16 +51,17 @@ def plot_label_distribution(dataset,dataset_type="train",save_dir="figures"):
     plt.savefig(file_path)
     plt.close()  # Chiude la figura per liberare la memoria
 
-    print(f"Grafico salvato in: {file_path}")
+    logger.info(f"Grafico salvato in: {file_path}")
 
 
    #Visualizza la distribuzione delle finestre in base alle etichette.
 def plot_window_distribution(X, Y,dataset_type="train",save_dir="figures"):
     num_windows = len(Y)
     # Controllo delle dimensioni
-    print(f"Numero totale di finestre: {num_windows}")
-    print(f"Forma delle finestre (X): {X.shape}")
-    print(f"Numero di etichette uniche: {len(np.unique(Y))}")
+    logger.info(f"Numero totale di finestre: {num_windows}")
+    logger.info(f"Forma delle finestre (X): {X.shape}")
+    logger.info(f"Numero di etichette uniche: {len(np.unique(Y))}")
+
 
     # Ottieni tutte le etichette uniche
     unique_labels,counts = np.unique(Y,return_counts=True)
@@ -85,7 +89,7 @@ def plot_window_distribution(X, Y,dataset_type="train",save_dir="figures"):
     plt.savefig(file_path)
     plt.close()  # Chiude la figura per liberare la memoria
 
-    print(f"Grafico salvato in: {file_path}")
+    logger.info(f"Grafico salvato in: {file_path}")
 
         # Salva il numero di finestre in un file JSON
     # Salva il numero di finestre in un file JSON
@@ -101,8 +105,77 @@ def plot_window_distribution(X, Y,dataset_type="train",save_dir="figures"):
     with open(json_file_path, 'w') as json_file:
         json.dump(json_data, json_file,indent=4)
 
-    print(f"Informazioni salvate in: {json_file_path}")
+    logger.info(f"File JSON salvato in: {json_file_path}")
 
+
+
+
+def compute_descriptive_statistics(grouped_data: Dict[int, List[np.ndarray]]) -> Dict[int, Dict[str, np.ndarray]]:
+    """
+    Calcola statistiche descrittive per ogni attività.
+
+    :param grouped_data: Dizionario con attività come chiavi e liste di tracce come valori.
+    :return: Dizionario con attività come chiavi e un dizionario di statistiche come valori.
+    """
+    stats = {}
+
+    for activity, traces in grouped_data.items():
+        logger.info(f"Calcolo statistiche descrittive per l'attività {activity} con {len(traces)} tracce")
+        all_data = np.vstack(traces)  # Unisco tutte le tracce in un unico array per analisi
+
+        # Escludo la prima colonna (timestamp)
+        data_without_timestamp = all_data[:, 1:]  # Rimuovo la prima colonna (timestamp)
+        # Calcolo acc_norm (radice della somma dei quadrati delle prime tre colonne)
+        acc_norm = np.sqrt(np.sum(data_without_timestamp [:, :3] ** 2, axis=1))
+
+        # Statistiche descrittive
+        stats[activity] = {
+            "mean": np.mean(data_without_timestamp, axis=0).tolist(),
+            "std": np.std(data_without_timestamp, axis=0).tolist(),
+            "min": np.min(data_without_timestamp , axis=0).tolist(),
+            "max": np.max(data_without_timestamp , axis=0).tolist(),
+            "acc_norm_mean": float(np.mean(acc_norm)), 
+            "acc_norm_std": float(np.std(acc_norm)), 
+            "acc_norm_min": float(np.min(acc_norm)),
+            "acc_norm_max": float(np.max(acc_norm))
+        }
+        output_path = os.path.join(FIGURES_DIR, f"stats_activity_{activity}.json")
+        with open(output_path, "w") as f:
+            json.dump(stats[activity], f, indent=4)
+        logger.info(f"Statistiche salvate in: {output_path}")
+
+    return stats
+
+
+# Funzione per tracciare un istogramma e fare il test KS
+def plot_histogram_and_ks_test(data: np.ndarray, activity: int):
+    """
+    Traccia un istogramma e verifica se i dati seguono una distribuzione normale usando il KS test.
+    
+    :param data: Dati della traccia (un array NumPy).
+    :param activity: Attività per cui si sta facendo il test.
+    """
+    # Traccio l'istogramma dei dati
+    plt.figure(figsize=(8, 6))
+    plt.hist(data.flatten(), bins='auto', color='blue', alpha=0.7, label=f'Activity {activity}')
+    plt.title(f'Histogram of Data for Activity {activity}')
+    plt.xlabel('Data Value')
+    plt.ylabel('Frequency')
+    plt.legend(loc='best')
+    plt.show()
+
+    # Eseguo il KS test confrontando con la distribuzione normale
+    # Calcolo la media e la deviazione standard dei dati per adattarli alla normale
+    mu, std = norm.fit(data.flatten())
+    
+    # Eseguo il KS test
+    stat, p_value = kstest(data.flatten(), 'norm', args=(mu, std))
+    print(f'Activity {activity} - p-value for KS test: {p_value}')
+
+    if p_value < 0.05:
+        print(f"Data for Activity {activity} do not follow a normal distribution (rejected by KS test).")
+    else:
+        print(f"Data for Activity {activity} follow a normal distribution (not rejected by KS test).")
 
 if __name__ == "__main__":
     # Esempio di utilizzo delle funzioni

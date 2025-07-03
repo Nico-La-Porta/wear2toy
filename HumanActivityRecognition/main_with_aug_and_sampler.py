@@ -145,8 +145,8 @@ else:
     )
     study.optimize(objective, n_trials=100)
 
-    logger.info("Best hyperparameters: ", study.best_params)
-    logger.info("Highest F1-score: ", study.best_value)
+    logger.info(f"Highest F1-score: {study.best_value}")
+    logger.info(f"Best hyperparameters: {study.best_params}")
 
     #salvo i best hyperparameters
     best_hyperparameters = study.best_params

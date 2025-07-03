@@ -104,7 +104,7 @@ test_dataset = HARDataset(X_Test, Y_Test)
 train_sampler = create_weighted_sampler(Y_Train_augmented)
 
 
-del dataset_train_labled, dataset_test_labeled, datasetTracesTrain, datasetTracesTest, X_Train, Y_Train
+del X_Train, Y_Train
 
 
 if os.path.exists(best_hyperparams_file):
@@ -160,8 +160,8 @@ else:
     )
     study.optimize(objective, n_trials=100)
 
-    logger.info("Best hyperparameters: ", study.best_params)
-    logger.info("Highest F1-score: ", study.best_value)
+    logger.info(f"Highest F1-score: {study.best_value}")
+    logger.info(f"Best hyperparameters: {study.best_params}")
 
     #salvo i best hyperparameters
     best_hyperparameters = study.best_params
