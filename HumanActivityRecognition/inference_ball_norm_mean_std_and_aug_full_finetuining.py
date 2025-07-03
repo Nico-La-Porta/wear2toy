@@ -165,7 +165,7 @@ for action_file in normalized_files:
 
     logger.info(f"Processando file normalizzato: {action_file}")
 
-    X_windows, Y_windows, kid_id_action_dict = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
+    X_windows, Y_windows, kid_id_action_dict, kid_ids_for_windows = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
 
     X.append(X_windows)
     Y.append(Y_windows)
@@ -501,6 +501,27 @@ else:
     fig.write_image(os.path.join(FIGURES_DIR, file_name))
     logger.debug(f"Grafico salvato in figures/{file_name}")
 
+
+
+# Creo modello finale e carico i migliori pesi
+model = DeepConvLSTM(n_classes=4)
+
+# Carico i pesi del miglior modello
+model.load_state_dict(
+    torch.load(
+        BEST_MODEL_PATH,
+        map_location=torch.device('cpu')
+    )
+)
+
+
+
+
+# Verifico che tutti i parametri siano addestrabili
+for name, param in model.named_parameters():
+    print(f"{name} requires_grad={param.requires_grad}")
+
+
 # Stampo confusion matrix per il training set
 plot_CM(
     mdl_class=DeepConvLSTM,
@@ -520,21 +541,6 @@ plot_CM(
     batch_size=best_batch_size,
     figure_name="cm_val_best_hyp_full_finetuning_ball_norm_mean_std_and_aug"
 )
-
-# Creo modello finale e carico i migliori pesi
-model = DeepConvLSTM(n_classes=4)
-
-# Carico i pesi del miglior modello
-model.load_state_dict(
-    torch.load(
-        BEST_MODEL_PATH,
-        map_location=torch.device('cpu')
-    )
-)
-
-# Verifico che tutti i parametri siano addestrabili
-for name, param in model.named_parameters():
-    print(f"{name} requires_grad={param.requires_grad}")
 
 # Creo il DataLoader per il test
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, drop_last=True, shuffle=False)

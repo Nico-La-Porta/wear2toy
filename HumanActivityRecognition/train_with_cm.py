@@ -46,12 +46,14 @@ class EarlyStopper:
                 return True  # Fermati
         return False
 
-def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int = 16, lr: float = 0.01, patience: int = 7, figure_name: str = "figure", f1_average: str = 'macro', validate: bool= True, save_confusion_matrix: bool = False):
+def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int = 16, lr: float = 0.01, patience: int = 7, figure_name: str = "figure", f1_average: str = 'macro', validate: bool= True, save_confusion_matrix: bool = False, criterion=None):
 
     os.makedirs(FIGURES_DIR, exist_ok=True)  # Assicura che la cartella per le figure esista
 
     opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
-    criterion = torch.nn.CrossEntropyLoss()
+    # Usa il criterion passato come parametro, altrimenti usa CrossEntropyLoss di default
+    if criterion is None:
+        criterion = torch.nn.CrossEntropyLoss()
 
     # Pass the model to the appropriate device (GPU or CPU)
     net.to(device)
@@ -205,9 +207,10 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
 
 
 
-def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False, save_f1_score: bool = True):
+def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False, save_f1_score: bool = True, criterion=None):
     net.eval()
-    criterion = torch.nn.CrossEntropyLoss()
+    if criterion is None:
+        criterion = torch.nn.CrossEntropyLoss()
     all_test_preds = []
     all_test_labels = []
 
