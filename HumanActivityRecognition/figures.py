@@ -140,7 +140,6 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
         os.makedirs(FIGURES_DIR, exist_ok=True)
  
         # Plot
-        plt.figure(figsize=(10, 8), dpi=300)
         plt.figure(figsize=(16, 14), dpi=300)
         sns.heatmap(cm, annot=True, fmt="d", cmap="Greys",
             xticklabels=labels_names, yticklabels=labels_names,
@@ -151,8 +150,6 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
         plt.title(f"Confusion Matrix - {figure_name}", fontsize=16)
         plt.xlabel("Predicted", fontsize=16)
         plt.ylabel("True", fontsize=16)
-        plt.xticks(fontsize=14)
-        plt.yticks(fontsize=14)
         plt.tight_layout()  
  
         # Salvataggio

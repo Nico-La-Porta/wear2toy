@@ -13,8 +13,6 @@ import optuna.visualization as vis
 import train
 import torch
 import torch.nn as nn
-from utils.focal_loss import FocalLoss
-
 import train_with_cm
 import matplotlib.pyplot as plt
 #definisco il path da cui leggere i .csv
@@ -108,44 +106,6 @@ for action_id in df_ball['action_id'].unique():
     df_action.to_csv(os.path.join(path,f'df_ball_action_{action_id}.csv'),index=False) #index=False per non salvare l'indice
     logger.debug(f"Salvato il dataframe df_ball_action_{action_id}.csv")
 
-#normalizzo i dati 
-
-# Carico mean e std salvati durante il pre-training
-logger.debug(f"REPORTS_DIR attuale: {REPORTS_DIR}")
-mean_df = pd.read_csv(os.path.join(REPORTS_DIR, 'mean_trs.csv'))
-std_df = pd.read_csv(os.path.join(REPORTS_DIR, 'std_trs.csv'))
-
-mean = mean_df['mean'].values
-std = std_df['std'].values
-
-logger.info("Parametri di normalizzazione caricati dal pre-training")
-logger.debug(f"Mean shape: {mean.shape}, Std shape: {std.shape}")
-
-#ELIMINO  PRIMA E ULTIMA COLONNA RIGA DI MEAN PERCHE NON SONO FEATURE DI INTERESSE (sono timestamp e P)
-mean = mean[1:-1] 
-std = std[1:-1]  
-
-logger.info("Parametri di normalizzazione caricati dal pre-training")
-logger.debug(f"Mean shape: {mean.shape}, Std shape: {std.shape}")
-
-# Normalizzo i dati per ogni action_id
-for action_id in df_ball['action_id'].unique():
-    # Leggo il file CSV per questa azione
-    df_action = pd.read_csv(os.path.join(path, f'df_ball_action_{action_id}.csv'))
-    
-    logger.info(f"Normalizzando action_id {action_id} - Shape originale: {df_action.shape}")
-    
-    # Applico la normalizzazione usando la funzione del modulo normalization
-    df_action_normalized = normalization.normalize_dataframe_mean_std(df_action, mean, std)
-    
-    # Salvo il DataFrame normalizzato
-    normalized_file_path = os.path.join(path, f'df_ball_action_{action_id}_normalized.csv')
-    df_action_normalized.to_csv(normalized_file_path, index=False)
-    
-    logger.info(f"Salvato file normalizzato: {normalized_file_path}")
-    logger.debug(f"Shape del DataFrame normalizzato: {df_action_normalized.shape}")
-
-logger.info("Normalizzazione completata per tutte le azioni")
 
 
 #applico sliding window con la funzion process_csv
@@ -158,16 +118,14 @@ sliding_window_step = 50
 
 X, Y = [], []
 kid_action_counts = {}
-normalized_files = [f for f in os.listdir(path) if f.endswith('_normalized.csv') and 'ball_action' in f]
-logger.info(f"File normalizzati trovati: {normalized_files}")
 
-for action_file in normalized_files:
+for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.split('_')[1] == 'ball']:
     file_path = os.path.join(path, action_file)
     action_id = action_file.split('_')[-2]
 
     logger.info(f"Processando file normalizzato: {action_file}")
 
-    X_windows, Y_windows, kid_id_action_dict, kid_ids_for_windows = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
+    X_windows, Y_windows, kid_id_action_dict, kid_id_windows = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
 
     X.append(X_windows)
     Y.append(Y_windows)
@@ -290,6 +248,15 @@ logger.info("Train shape: %s %s", X_train.shape, Y_train.shape)
 logger.info("Val shape: %s %s", X_val.shape, Y_val.shape)
 logger.info("Test shape: %s %s", X_test.shape, Y_test.shape)
 
+# Flatten etichette se necessario
+Y_train = Y_train.flatten()
+Y_val = Y_val.flatten()
+Y_test = Y_test.flatten()
+
+logger.info("Train shape: %s %s", X_train.shape, Y_train.shape)
+logger.info("Val shape: %s %s", X_val.shape, Y_val.shape)
+logger.info("Test shape: %s %s", X_test.shape, Y_test.shape)
+
 # Conto quante finestre per ogni azione in train e test
 train_action_counts = defaultdict(list)
 test_action_counts = defaultdict(list)
@@ -300,81 +267,67 @@ for i, label in enumerate(Y_train):
 for i, label in enumerate(Y_test):
     test_action_counts[label].append(i)
 
-# Liste per nuovi dati aggiornati
-X_train_new, Y_train_new = list(X_train), list(Y_train)
-X_test_new, Y_test_new = list(X_test), list(Y_test)
 
+X_train_new = X_train.copy()
+Y_train_new = Y_train.copy()
+X_test_new = X_test.copy()
+Y_test_new = Y_test.copy()
+
+
+indices_to_remove_from_train = []
+windows_to_add_to_test = []
 
 azioni_modificate = 0
 
 for action in np.unique(Y):
-    train_ids = train_action_counts.get(action, []) #Indici delle finestre nel train mi servono per vedere se ho almeno 3 finestre
-    test_ids = test_action_counts.get(action, []) #Indici delle finestre nel test mi servono per vedere se ho almeno 1 finestra
+    train_ids = train_action_counts.get(action, [])
+    test_ids = test_action_counts.get(action, [])
 
     if len(test_ids) == 1 and len(train_ids) >= 3:
         idx_to_move = train_ids[-1]  # prendo l'ultima finestra di quella azione nel train
 
-        logger.debug(f"Azione {action} - Sposto la finestra con indice originale {idx_to_move} dal train al test")
-        logger.debug(f"Y_train[idx]: {Y_train_new[idx_to_move]}")
-        logger.debug(f"X_train[idx][:5]: {X_train_new[idx_to_move][:5]}")  # primi 5 campioni della finestra
-        logger.debug(f"Shape della finestra: {X_train_new[idx_to_move].shape}")
+        logger.debug(f"Azione {action} - Sposto la finestra con indice {idx_to_move} dal train al test")
+        logger.debug(f"Y_train[idx]: {Y_train[idx_to_move]}")
+        logger.debug(f"X_train[idx][:5]: {X_train[idx_to_move][:5]}")
+        logger.debug(f"Shape della finestra: {X_train[idx_to_move].shape}")
 
-        # Aggiungo l'indice della finestra spostata al test
-        test_indices_totali.append(train_indices_totali[train_ids[-1]])
-
-        # Rimuovo l'indice dalla lista degli indici di train
-        train_indices_totali.remove(train_indices_totali[train_ids[-1]])
-
-        # Sposto la finestra nel test
-        X_test_new.append(X_train_new[idx_to_move])
-        Y_test_new.append(Y_train_new[idx_to_move])
-
-        #verifico che la finestra sia stata spostata correttamente
-        logger.debug(f"Y_test[idx]: {Y_test_new[-1]}")
-        logger.debug(f"X_test[idx][:5]: {X_test_new[-1][:5]}")  # primi 5 campioni della finestra
-        logger.debug(f"Shape della finestra: {X_test_new[-1].shape}")
-
-        # La rimuovo dal train
-        del X_train_new[idx_to_move]
-        del Y_train_new[idx_to_move]
-
+        # Salva la finestra da spostare
+        windows_to_add_to_test.append({
+            'X': X_train[idx_to_move].copy(),
+            'Y': Y_train[idx_to_move],
+            'original_idx': idx_to_move
+        })
+        
+        # Segna l'indice da rimuovere
+        indices_to_remove_from_train.append(idx_to_move)
+        
         azioni_modificate += 1
         logger.info(f"Azione {action}: spostata una finestra da train a test per bilanciare meglio")
 
-# Converto di nuovo in numpy
-X_train = np.array(X_train_new)
-Y_train = np.array(Y_train_new)
-X_test = np.array(X_test_new)
-Y_test = np.array(Y_test_new)
+
+if indices_to_remove_from_train:
+    # Ordino gli indici in ordine decrescente per rimuoverli dalla fine
+    indices_to_remove_from_train.sort(reverse=True)
+    
+    # Rimuovo gli elementi dal train
+    X_train_new = np.delete(X_train_new, indices_to_remove_from_train, axis=0)
+    Y_train_new = np.delete(Y_train_new, indices_to_remove_from_train, axis=0)
+    
+    # Aggiunoi gli elementi al test
+    for window_data in windows_to_add_to_test:
+        X_test_new = np.vstack([X_test_new, window_data['X'].reshape(1, *window_data['X'].shape)])
+        Y_test_new = np.append(Y_test_new, window_data['Y'])
+        
+        logger.debug(f"Aggiunta finestra al test - Y: {window_data['Y']}")
+        logger.debug(f"Shape della finestra aggiunta: {window_data['X'].shape}")
+
+# Aggiorno le variabili finali
+X_train = X_train_new
+Y_train = Y_train_new
+X_test = X_test_new
+Y_test = Y_test_new
 
 logger.info("Azioni modificate: %d", azioni_modificate)
-
-
-# Salvo gli indici finali dopo il bilanciamento
-np.savez(f"{path}\\split_final_indices_ball.npz",
-         train=np.array(train_indices_totali),
-         val=np.array(val_indices_totali),
-         test=np.array(test_indices_totali))
-
-# Stampa controllo
-logger.info("Train shape: %s %s", X_train.shape, Y_train.shape)
-logger.info("Val shape: %s %s", X_val.shape, Y_val.shape)
-logger.info("Test shape: %s %s", X_test.shape, Y_test.shape)
-
-
-# Ricarico gli indici salvati
-loaded_data = np.load(f"{path}\\split_final_indices_ball.npz")
-
-# Estraggo gli indici delle finestre
-train_indices_totali = loaded_data['train']
-val_indices_totali = loaded_data['val']
-test_indices_totali = loaded_data['test']
-
-# Stampa per verificare
-logger.info(f"Train indices: {train_indices_totali.shape}")
-logger.info(f"Val indices: {val_indices_totali.shape}")
-logger.info(f"Test indices: {test_indices_totali.shape}")
-
 
 # Trova tutte le etichette uniche presenti nei dati
 unique_labels = np.unique(Y_train)
@@ -396,18 +349,7 @@ logger.info("Nuove etichette val: %s ", np.unique(Y_val_mapped))
 logger.info("Nuove etichette test: %s", np.unique(Y_test_mapped))
 
 
-# Calcolo i pesi delle classi per la Focal Loss
-class_counts = np.bincount(Y_train_mapped) # Conta le occorrenze di ogni classe
-total_samples = len(Y_train_mapped) # Totale campioni nel train
-class_weights = total_samples / (len(class_counts) * class_counts) # Calcola i pesi delle classi
 
-logger.info(f"Conteggio classi: {class_counts}")
-logger.info(f"Pesi delle classi: {class_weights}")
-
-
-#converto i pesi delle classi in un tensore di PyTorch
-class_weights_tensor = torch.FloatTensor(class_weights)
-logger.info(f"Class weights tensor: {class_weights_tensor}")
 
 # Creo i dataset per il training val e test
 train_dataset = HARDataset(X_train, Y_train_mapped)
@@ -424,68 +366,52 @@ logger.debug(f"Tipo di train_dataset: {type(train_dataset)}")
 logger.debug(f"Tipo di val_dataset: {type(val_dataset)}")
 logger.debug(f"Tipo di test_dataset: {type(test_dataset)}")
 
-# Modifico i nomi dei file per distinguere dal precedente approccio
-BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_full_finetuning_ball_norm_mean_std_and_aug._focal_losspkl")
-BEST_SCORE_PATH = os.path.join(REPORTS_DIR, "best_score_full_finetuning_ball_norm_mean_std_and_aug_focal_loss.txt")
+BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_inference_ball_without_anythinh.pkl")
+BEST_SCORE_PATH = os.path.join(REPORTS_DIR, "best_score_inference_ball_without_anythinh.txt")
 
-best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_full_finetuning_ball_norm_mean_std_and_aug_focal_loss.csv')
+best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_inference_inference_ball_without_anythinh.csv')
 if os.path.exists(best_hyperparams_file):
     logger.debug(f"Carico i migliori iperparametri da {best_hyperparams_file}")
     best_hyperparameters=pd.read_csv(best_hyperparams_file).iloc[0].to_dict()
     best_lr = best_hyperparameters['lr']
     best_batch_size = int(best_hyperparameters['batch_size'])
-    best_gamma = best_hyperparameters.get('gamma', 2.0)  # Default gamma se non presente
-    
-    # Crea la Focal Loss con i migliori iperparametri
-    best_criterion = FocalLoss(
-        gamma=best_gamma, 
-        alpha=class_weights_tensor, 
-        reduction='mean', 
-        task_type='multi-class', 
-        num_classes=4
-    )
 
 else:
     def objective(trial):
-        # Definisco gli iperparametri da ottimizzare
+        # DefiniscO gli iperparametri da ottimizzare
         lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
         batch_size = trial.suggest_categorical('batch_size', [2,4,6])
-        gamma = trial.suggest_float('gamma', 0.5, 3.0)
+
         # Creo i DataLoader con il batch_size suggerito
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+        
+        train_loader = DataLoader(train_dataset, batch_size=batch_size,shuffle=True, drop_last=True)
+
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
-        # Creo il modello con gli iperparametri suggeriti
-        model = DeepConvLSTM(n_classes=4)  # Inizializzo già con 4 classi
+        # Creo il modello con gli iperparametri suggeriti e rimuovo la testa originale, in modo da non caricare i pesi associati
+        model = DeepConvLSTM()
 
-        # Carico i pesi del modello pre-trainato (senza strict=False per evitare problemi con la testa)
-        pretrained_state_dict = torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_norm_mean_std_and_aug.pkl', map_location=torch.device('cpu'))
-        
-        # Rimuovo i pesi della testa (fully connected) dal dizionario dei pesi pre-trainati
-        # perché il modello pre-trainato potrebbe avere un numero diverso di classi
-        pretrained_state_dict = {k: v for k, v in pretrained_state_dict.items() if not k.startswith('fc')}
-        
-        # Carico i pesi pre-trainati (senza la testa)
-        model.load_state_dict(pretrained_state_dict, strict=False)
-        
-        logger.info("Caricati i pesi pre-trainati per full fine-tuning")
+    
+        model.load_state_dict(torch.load(r'C:\codes\HumanActivityRecognition\models\best_model_dl_without_anything.pkl', map_location=torch.device('cpu')), strict=False)
 
-        # NON congelo nessun parametro - tutti i parametri sono addestrabili per il full fine-tuning
+
+
+        # Ora sostituisco la testa del modello con la nuova dimensione di classi (4)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, 4)  # 4 classi
+        model.set_n_classes(4)
+
+
+        # Congelo tutti i parametri tranne quelli della testa (fully connected)
         for param in model.parameters():
-            param.requires_grad = True
-        
-        logger.info("Tutti i parametri sono scongelati per full fine-tuning")
+            param.requires_grad = False  # Congelo tutti i pesi
 
-        # Creo la Focal Loss con i pesi delle classi
-        criterion = FocalLoss(
-            gamma=gamma, 
-            alpha=class_weights_tensor, 
-            reduction='mean', 
-            task_type='multi-class', 
-            num_classes=4
-        )
-        # Eseguo l'allenamento con tutti i parametri addestrabili
-        best_f1_score = train_with_cm.train(model, train_loader, val_loader, epochs=100, batch_size=batch_size, lr=lr, criterion=criterion)
+        # Sblocco i parametri della testa (fully connected)
+        for param in model.fc.parameters():
+            param.requires_grad = True  # Solo i pesi della testa saranno addestrabili
+
+        # Eseguo l'allenamento
+        best_f1_score = train_with_cm.train(model, train_loader, val_loader, epochs=100, batch_size=batch_size, lr=lr)
 
         # Salvo modello se è il migliore finora
         is_better = False
@@ -499,93 +425,103 @@ else:
                 is_better = True
 
         if is_better:
-            torch.save(model.state_dict(), BEST_MODEL_PATH)
+            torch.save(model.state_dict(), BEST_MODEL_PATH)  # use joblib.dump() if it's not a PyTorch model
             with open(BEST_SCORE_PATH, "w") as f:
                 f.write(str(best_f1_score))
             logger.info(f"Nuovo miglior modello salvato in: {BEST_MODEL_PATH} con F1 score: {best_f1_score}")
 
         return best_f1_score
 
-    # Creazione studio Optuna
+    # Creazione studio Optuna ottimizza, nel senso di minimizzare la loss in 100 prove
+    # Creazione dello studio con il MedianPruner
     study = optuna.create_study(
         direction='maximize', 
-        pruner=MedianPruner(n_startup_trials=5, n_warmup_steps=10)
+        pruner=MedianPruner(n_startup_trials=5, n_warmup_steps=10)  # Parametri di pruning per evitare di continuare trial non promettenti: n_startup_trials=5 significa che i primi 5 trial non verranno prunati, n_warmup_steps=10 significa che dopo 10 trial verrà applicato il pruning
+        #Il pruner interromperà automaticamente i trial che non sono promettenti, basandosi sui punteggi parziali (F1-score) ottenuti durante l'allenamento.
     )
     study.optimize(objective, n_trials=100)
 
-    logger.info(f"Best hyperparameters: {study.best_params}")
+    logger.info(f"Best hyperparameters: {study.best_params}")  # Usa f-string
     logger.info(f"Highest F1-score: {study.best_value}") 
 
-    # Salvo i best hyperparameters
+    #salvo i best hyperparameters
     best_hyperparameters = study.best_params
     best_hyperparameters['best_f1_score'] = study.best_value
     best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_full_finetuning_ball_norm_mean_std_and_aug_focal_loss.csv'), index=False)
+    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_inference_inference_ball_without_anythinh.csv'), index=False)
 
     best_lr = study.best_params['lr']
     best_batch_size = study.best_params['batch_size']
-    best_gamma = study.best_params['gamma']
 
-    # Visualizzo la storia dell'ottimizzazione
-    file_name = "optimization_history_full_finetuning_ball_norm_mean_std_and_aug_focal_loss.png"
-    fig = vis.plot_optimization_history(study)
+    #visualizzare la storia dell'ottimizzazione effettuata da Optuna. Ci permette di vedere come l'f1 score
+    # è cambiato nel corso delle diverse prove (trials) durante l'ottimizzazione.
+    file_name = "optimization_history_inference_ball_without_anythinh.png"
+    fig=vis.plot_optimization_history(study)
     plt.show()
 
-    # Salvo il grafico
+    # Salvo il grafico nella cartella FIGURES con il nome specificato
     fig.write_image(os.path.join(FIGURES_DIR, file_name))
-    logger.debug(f"Grafico salvato in figures/{file_name}")
 
+    logger.debug(f"Grafico salvato in figures /{file_name}")
 
-
-# Creo modello finale e carico i migliori pesi
-model = DeepConvLSTM(n_classes=4)
-
-# Carico i pesi del miglior modello
-model.load_state_dict(
-    torch.load(
-        BEST_MODEL_PATH,
-        map_location=torch.device('cpu')
-    )
-)
-
-
-
-
-# Verifico che tutti i parametri siano addestrabili
-for name, param in model.named_parameters():
-    print(f"{name} requires_grad={param.requires_grad}")
-
-
-# Stampo confusion matrix per il training set
+#TO DO: ALTRO SCRIPT
+#STAMPO CM DELL'ALLENAMENTO SUL TRAINING SET
 plot_CM(
     mdl_class=DeepConvLSTM,
     mdl_weights=BEST_MODEL_PATH,
-    X=X_train,
+    X= X_train,
     Y=Y_train_mapped,
     batch_size=best_batch_size,
-    figure_name="cm_train_best_hyp_full_finetuning_ball_norm_mean_std_and_aug_focal_loss"
+    figure_name="cm_train_best_hyp_inference_optuna_inference_ball_without_anythinh"
 )
 
-# Stampo confusion matrix per il validation set
+#STAMPO CM DELL'ALLENAMENTO SUL VAL SET
 plot_CM(
     mdl_class=DeepConvLSTM,
     mdl_weights=BEST_MODEL_PATH,
     X=X_val,
     Y=Y_val_mapped,
     batch_size=best_batch_size,
-    figure_name="cm_val_best_hyp_full_finetuning_ball_norm_mean_std_and_aug_focal_loss"
+    figure_name="cm_val_best_hyp_inference_optuna_inference_ball_without_anythinh"
 )
 
-# Creo il DataLoader per il test
+# Creo modello e carico pesi del miglior modello (trovato prima in optuna)
+model = DeepConvLSTM(n_classes=4)
+
+# Rimuovo la testa originale, in modo da non caricare i pesi associati
+model.load_state_dict(
+    torch.load(
+        BEST_MODEL_PATH,
+        map_location=torch.device('cpu')
+    ),
+    strict=False
+)
+
+
+# Congelo tutti i parametri tranne quelli della testa (fully connected)
+for param in model.parameters():
+        param.requires_grad = False  # Congela tutti i pesi
+
+
+for name, param in model.named_parameters():
+    print(f"{name} requires_grad={param.requires_grad}")
+
+
+
+# Creo i DataLoader con i migliori iperparametri
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, drop_last=True, shuffle=False)
 
-# Eseguo l'evaluation sul test set
-test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(
-    model, 
-    test_loader, 
-    figure_name="cm_test_best_hyp_full_finetuning_ball_norm_mean_std_and_aug_focal_loss", 
-    save_confusion_matrix=True,
-    criterion=best_criterion
-)
 
-logger.info(f"Test Results - Loss: {test_loss:.4f}, Accuracy: {test_acc:.4f}, F1-Score: {test_f1:.4f}")
+
+# Eseguo l'eval sul test set usando i migliori iperparametri
+test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(model, test_loader, figure_name= "cm_test_best_hyp_optuna_inference_ball_without_anythinh", save_confusion_matrix=True)
+
+
+
+
+
+
+
+
+
+

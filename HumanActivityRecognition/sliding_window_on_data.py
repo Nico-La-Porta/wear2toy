@@ -123,7 +123,7 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
 
 
     
-    return X_all, Y_all, kid_id_action_count, kid_ids_all  
+    return X_all, Y_all, kid_id_action_count 
 
 
 

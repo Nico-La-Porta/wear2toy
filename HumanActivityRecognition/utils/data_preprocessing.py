@@ -32,7 +32,7 @@ def load_trace_data(path, annotations_file, signals_file):
 
 def build_dataset(path):
 
-    # Ottieni file di annotazioni e segnali
+    # Ottengo file di annotazioni e segnali
     annotations_files = get_files_in_directory(path, '_ann.npz')
     signals_files = get_files_in_directory(path, '_sig.npz')
     
@@ -42,18 +42,18 @@ def build_dataset(path):
         # Estrai il TraceID
         traceID = ann_file.replace('_ann.npz', '')
 
-        # Costruisci il nome del file dei segnali corrispondente
+        # Costruisco il nome del file dei segnali corrispondente
         sig_file = traceID + '_sig.npz'
 
-        # Verifica che il file di segnali esista
+        # Verifico che il file di segnali esista
         if sig_file in signals_files:
-            # Carica i dati delle annotazioni e segnali
+            # Carico i dati delle annotazioni e segnali
             annotations, signals = load_trace_data(path, ann_file, sig_file)
 
-            # Aggiungi i dati al dataset
+            # Aggiungo i dati al dataset
             trace = {
                 'TraceID': traceID,
-                'TraceData': signals  # Puoi aggiungere annotazioni come richiesto
+                'TraceData': signals  
             }
             dataset_traces.append(trace)
         else:

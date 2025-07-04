@@ -48,6 +48,8 @@ class EarlyStopper:
 
 def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int = 16, lr: float = 0.01, patience: int = 7, figure_name: str = "figure", f1_average: str = 'macro', validate: bool= True, save_confusion_matrix: bool = False, criterion=None):
 
+    if validate and test_loader is None:
+        raise ValueError("test_loader è richiesto quando validate è True")
     os.makedirs(FIGURES_DIR, exist_ok=True)  # Assicura che la cartella per le figure esista
 
     opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
@@ -103,7 +105,7 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
         train_loss_history.append(np.mean(train_losses))
         train_f1score_history.append(train_f1score / len(train_loader)) #calcolo l'f1-score medio
 
-        val_h = net.init_hidden(batch_size)
+        
         val_losses = []
         accuracy = 0
         f1score = 0
@@ -114,7 +116,8 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
             with torch.no_grad():
                 for inputs, targets in test_loader:
                     batch_size = inputs.size(0)
-                    val_h = tuple([each.data for each in val_h])
+                    val_h = net.init_hidden(batch_size)
+                    #val_h = tuple([each.data for each in val_h])
                     net.to(device)
                     inputs, targets = inputs.to(device), targets.to(device)
 
@@ -289,8 +292,6 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
         plt.title(f"Confusion Matrix - {figure_name}", fontsize=16) 
         plt.xlabel("Predicted", fontsize=16)
         plt.ylabel("True", fontsize=16)
-        plt.xticks(fontsize=14)
-        plt.yticks(fontsize=14)
         plt.tight_layout()  
         plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_eval_confusion_matrix.png"), 
                     bbox_inches='tight', dpi=300)  # Salvataggio in alta qualità
