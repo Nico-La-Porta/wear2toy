@@ -5,31 +5,28 @@ from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 import sliding_window_on_data
 from torch.utils.data import DataLoader
 import glob
+from collections import defaultdict
 
 from models.DeepConvLSTM import DeepConvLSTM, HARDataset 
 import optuna
-from optuna.pruners import MedianPruner
 import optuna.visualization as vis
 import train
 import torch
-import torch.nn as nn
 import train_with_cm
 import matplotlib.pyplot as plt
-from collections import defaultdict
-import logging
-logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 #definisco il path da cui leggere i .csv
 
 from utils.log_config import logger
+from utils.data_preprocessing import remove_classes_from_car_data, get_class_distribution
+
+from optuna.pruners import MedianPruner
+
 from figures import plot_CM
-import normalization
 
 #definisco il path da cui leggere i .csv
 
-path="C:\codes\HumanActivityRecognition\data\downstream_data"
-logger.debug(path)
-
-
+path='C:\codes\HumanActivityRecognition\data\downstream_data'
+print(path)
 
 #Visto che l'informazione relativa all'id del bambino lo abbiamo, così come abbiamo anche l'informazione relativa
 #al giocattolo, vado a filtrare i .csv in modo tale da avere solo le righe che hanno l'attività non nulla e poi
@@ -38,90 +35,113 @@ logger.debug(path)
 # Definisco il percorso della cartella contenente i CSV
 
 # Nome del file CSV finale
-final_csv_path = os.path.join(path, 'df_BA_non_null.csv')
+final_csv_path = os.path.join(path, 'df_CAR_non_null.csv')
 
 # Controllo se il file esiste già
 if os.path.exists(final_csv_path):
-    logger.debug(f"Il file {final_csv_path} esiste già. Lo sto caricando...")
-    df_ball = pd.read_csv(final_csv_path)
+    print(f"Il file {final_csv_path} esiste già. Lo sto caricando...")
+    df_car = pd.read_csv(final_csv_path)
 else:
-    #trovo tutti i file che corrispondono a "BA" nella cartella path e li stampo a schermo
-    files = glob.glob(os.path.join(path, "*_BA*.csv"))
-    logger.debug(f"Files: {files}")
+    #trovo tutti i file che corrispondono a "C*" nella cartella path e li stampo a schermo
+    files = glob.glob(os.path.join(path, "*_C*.csv"))
+    print("Files:", files)
     
-    kid_ball, kid_ball_no_null = [], [] # liste per salvare utenti prima e dopo il merge 
-    df_list_ball = [] # lista vuota per appendere i dataframe con attività non nulla
+    kid_car, kid_car_no_null = [], [] # liste per salvare utenti prima e dopo il merge 
+    df_list_car = [] # lista vuota per appendere i dataframe con attività non nulla
 
     for file in files:
         df = pd.read_csv(file)
         
-        logger.debug(f"Original shape: {df.shape}")
-        kid_ball.append(df['kid_id'].unique())
+        print("Original shape:", df.shape)
+        kid_car.append(df['kid_id'].unique())
         df = df[df['action_id'] != 0] #filtro le righe con action_id non nullo
-        logger.debug(f"Filtered shape: {df.shape}")
-        kid_ball_no_null.append(df['kid_id'].unique())
+        print("Filtered shape:", df.shape)
+        kid_car_no_null.append(df['kid_id'].unique())
 
-        logger.debug(f"Columns: {df.columns}")
-        logger.debug(f"Action counts:\n{df['action'].value_counts()}")
-        logger.debug(f"Toy counts:\n{df['toy_id'].value_counts()}")
-        logger.debug("="*50)  # Separatore tra i file
+        print("Columns:", df.columns)
+        print("Action counts:\n", df['action'].value_counts())
+        print("Toy counts:\n", df['toy_id'].value_counts())
+        print("="*50)  # Separatore tra i file
 
     # mi stampo gli utenti prima di fare il merge e dopo il merge
-    if len(kid_ball) > 0:
-        logger.info(f"Numero di utenti che hanno fatto almeno un azione: {len(kid_ball_no_null)/len(kid_ball)}")
-    else:
-        logger.info("Nessun utente trovato nei file analizzati (kid_ball è vuoto).")
+    logger.info(f"Numero di utenti che hanno fatto almeno un azione: {len(kid_car_no_null)/len(kid_car)}")
 
     '''
     Visto che l'informazione relativa all'id del bambino lo abbiamo, così come abbiamo anche l'informazione relativa
     al giocattolo, vado a filtrare i .csv in modo tale da avere solo le righe che hanno l'attività non nulla e poi
-    appendo tutte le righe non nulle in un unico dataframe per tutti i file che terminano in .csv nella balltella path
+    appendo tutte le righe non nulle in un unico dataframe per tutti i file che terminano in .csv nella cartella path
     '''
 
     for file in os.listdir(path):
         if not file.endswith('.csv'):
             continue
     
-        #leggo solo i file che dopo l'undescore ha BA*.csv
-        if file.split('_')[-1].startswith('BA') and file.endswith('.csv'): #controllo che il file termini con .csv
+        #leggo solo i file che dopo l'undescore ha BE*.csv
+        if file.split('_')[-1].startswith('C') and file.endswith('.csv'): #controllo che il file termini con .csv
             df_temp=pd.read_csv(os.path.join(path,file))
             df_temp = df_temp[df_temp['action_id'] != 0]
-            df_list_ball.append(df_temp)
+            df_list_car.append(df_temp)
 
-    df_ball = pd.concat(df_list_ball)
-    logger.info("Dimensioni del df_ball con tutte le attività non nulle")
-    logger.info(df_ball.shape)
-    logger.info(df_ball.columns)
-    logger.info(df_ball['action'].value_counts())
+    df_car = pd.concat(df_list_car)
+    print("Dimensioni del df_car con tutte le attività non nulle")
+    print(df_car.shape)
+    print(df_car.columns)
+    print(df_car['action'].value_counts())
 
     # salvo il dataframe
-    df_ball.to_csv(os.path.join(path,'df_BA_non_null.csv'),index=False)
+    df_car.to_csv(os.path.join(path,'df_CAR_non_null.csv'),index=False)
+
+#filtro le classi per trovare solo quelle che mi interessano
+logger.info("FILTRAGGIO CLASSI DAL DATASET CAR")
+
+# Mostra distribuzione originale
+logger.info("Distribuzione action_id originale:")
+original_counts = df_car['action_id'].value_counts().sort_index()
+for action_id, count in original_counts.items():
+    logger.info(f"   Action {action_id}: {count} righe")
+
+
+# Rimuovo le classi che non ti interessano
+classes_to_remove = [2, 3, 5, 9, 11, 12, 14, 16, 18, 19, 27, 28, 29, 31, 32, 37, 38, 39, 40]
+logger.info(f"Rimozione action_id: {classes_to_remove}")
+
+df_car_filtered = df_car[~df_car['action_id'].isin(classes_to_remove)] # filtro il dataframe per rimuovere le classi che non mi interessano
+
+logger.info(f"Righe prima del filtro: {len(df_car)}")
+logger.info(f"Righe dopo il filtro: {len(df_car_filtered)}")
+logger.info(f"Righe rimosse: {len(df_car) - len(df_car_filtered)}")
+
+
+logger.info("Distribuzione action_id dopo filtro:")
+filtered_counts = df_car_filtered['action_id'].value_counts().sort_index()
+for action_id, count in filtered_counts.items():
+    logger.info(f"   Action {action_id}: {count} righe")
 
 
 #ora divido il dataframe in base all'attività (action_id) e salvo i dataframe in un file .csv
 #per ogni attività
 
-for action_id in df_ball['action_id'].unique():
-    df_action = df_ball[df_ball["action_id"] == action_id] #filtro il dataframe in base all'attività
-    logger.debug(f"Dimensioni del dataframe df_ball_action_{action_id} - {df_action.shape}") #log delle dimensioni del dataframe
-    logger.info(f"Conteggio delle attività per df_ball_action_{action_id}") #log del conteggio delle attività
+for action_id in df_car_filtered['action_id'].unique():
+    df_action = df_car_filtered[df_car_filtered["action_id"] == action_id] #filtro il dataframe in base all'attività
+    logger.debug(f"Dimensioni del dataframe df_car_action_{action_id} - {df_action.shape}") #log delle dimensioni del dataframe
+    logger.info(f"Conteggio delle attività per df_car_action_{action_id}") #log del conteggio delle attività
     #salvo il dataframe
-    df_action.to_csv(os.path.join(path,f'df_ball_action_{action_id}.csv'),index=False) #index=False per non salvare l'indice
-    logger.debug(f"Salvato il dataframe df_ball_action_{action_id}.csv")
-
+    df_action.to_csv(os.path.join(path,f'df_car_action_{action_id}.csv'),index=False) #index=False per non salvare l'indice
+    logger.debug(f"Salvato il dataframe df_car_action_{action_id}.csv")
 
 #applico sliding window con la funzion process_csv
 nb_sensor_channels = 9
 sliding_window_length = 100
 sliding_window_step = 50
 
-#ora applico la funzione sliding window (che mi da come output x_window e y_window) a tutti i .csv relativi al giocattolo ball
+#ora applico la funzione sliding window (che mi da come output x_window e y_window) a tutti i .csv relativi al giocattolo car
 #e poi concateno tutto in un unica x e y 
 
 X, Y = [], []
 kid_action_counts = {}
 
-for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.split('_')[1] == 'ball']:
+
+for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.split('_')[1] == 'car']:
     file_path = os.path.join(path, action_file)
     action = action_file.split('_')[-1].split('.')[0]
 
@@ -132,8 +152,8 @@ for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.spli
 
 
     logger.info(f"Numero  totale di finestre per l'azione {action}:{len(X_windows)}")
-    kid_action_counts[f"ball_action_{action}"] = kid_id_action_dict #aggiungo il dizionario al dizionario principale per tenere traccia del numero di finestre per ogni bambino per ogni azione, ogni ball_action è una chiave e il valore è un dizionario con il numero di finestre per ogni bambino
-    logger.info(f"Contenuto finale di kid_action_counts: {kid_action_counts}") #per veere quante finestre per ogni azione e per ogni bambino sono state elaborte 
+    kid_action_counts[f"car_action_{action}"] = kid_id_action_dict #aggiungo il dizionario al dizionario principale per tenere traccia del numero di finestre per ogni bambino per ogni azione, ogni car_action è una chiave e il valore è un dizionario con il numero di finestre per ogni bambino
+    logger.info(f"Contenuto finale di kid_action_counts: {kid_action_counts[f'car_action_{action}']}") #per vedere quante finestre per ogni azione e per ogni bambino sono state elaborate
 
 
 # Concateno tutti i dati in un unico array per X e Y
@@ -144,6 +164,35 @@ Y = np.concatenate(Y, axis=0)
 # Stampo le dimensioni di X e Y
 logger.info(f"Dimensioni di X finale: {X.shape}")
 logger.info(f"Dimensioni di Y finale: {Y.shape}")
+logger.info(f"Tipo di Y: {Y.dtype}")
+logger.info(f"Shape di Y: {Y.shape}")
+logger.info(f"Primi 5 elementi di Y: {Y[:5]}")
+logger.info(f"Tipo del primo elemento: {type(Y[0])}")
+
+
+if Y.ndim > 1:
+    logger.info(f"Y ha {Y.ndim} dimensioni ({Y.shape}), lo appiattisco...")
+    Y = Y.flatten()  # Converte da (2823, 1) a (2823,)
+    logger.info(f"Y dopo flatten: {Y.shape}")
+
+logger.info(f"Shape finale di Y: {Y.shape}")
+logger.info(f"Primi 5 elementi di Y: {Y[:5]}")
+logger.info(f"Tipo del primo elemento: {type(Y[0])}")
+
+#remap delle etichette per renderle consecutive
+unique_labels = np.unique(Y)
+label_mapping = {old_label: new_label for new_label, old_label in enumerate(unique_labels)}
+
+logger.info(f"Mappatura etichette: {label_mapping}")
+
+# Ora il remapping funzionerà correttamente
+Y_remapped = np.array([label_mapping[label] for label in Y])
+
+logger.info("Distribuzione finale delle classi con etichette rimappate:")
+get_class_distribution(Y_remapped, "Car Dataset con Etichette Rimappate")
+
+#uso le Y_remapped per il resto del codice
+Y = Y_remapped
 
 
 split_ratio_train = 0.7
@@ -305,7 +354,7 @@ logger.info("Azioni modificate: %d", azioni_modificate)
 
 
 # Salvo gli indici finali dopo il bilanciamento
-np.savez(f"{path}\\split_final_indices_ball.npz",
+np.savez(f"{path}\\split_final_indices_car.npz",
          train=np.array(train_indices_totali),
          val=np.array(val_indices_totali),
          test=np.array(test_indices_totali))
@@ -316,46 +365,10 @@ logger.info("Val shape: %s %s", X_val.shape, Y_val.shape)
 logger.info("Test shape: %s %s", X_test.shape, Y_test.shape)
 
 
-"""# Ricarico gli indici salvati per verificare
-loaded_data = np.load(f"{path}\\split_final_indices_ball.npz")
-
-# Estraggo gli indici delle finestre
-train_indices_totali = loaded_data['train']
-val_indices_totali = loaded_data['val']
-test_indices_totali = loaded_data['test']
-
-# Stampa per verificare
-logger.info(f"Train indices: {train_indices_totali.shape}")
-logger.info(f"Val indices: {val_indices_totali.shape}")
-logger.info(f"Test indices: {test_indices_totali.shape}")"""
-
-
-# Trova tutte le etichette uniche presenti nei dati
-unique_labels = np.unique(Y_train)
-
-# Crea un dizionario che mappa ogni etichetta originale a un valore consecutivo
-label_mapping = {label: idx for idx, label in enumerate(unique_labels)}
-
-# Stampa il dizionario per vedere il mapping
-logger.info("Mapping delle etichette: %s", label_mapping)
-
-# Applica il mapping ai dataset di train e test
-Y_train_mapped = np.array([label_mapping[y] for y in Y_train])
-Y_test_mapped = np.array([label_mapping[y] for y in Y_test])
-Y_val_mapped = np.array([label_mapping[y] for y in Y_val])
-
-# Controllo finale
-logger.info("Nuove etichette train: %s", np.unique(Y_train_mapped))
-logger.info("Nuove etichette val: %s ", np.unique(Y_val_mapped))
-logger.info("Nuove etichette test: %s", np.unique(Y_test_mapped))
-
-
-
-
 # Creo i dataset per il training val e test
-train_dataset = HARDataset(X_train, Y_train_mapped)
-val_dataset = HARDataset(X_val, Y_val_mapped)
-test_dataset = HARDataset(X_test, Y_test_mapped)
+train_dataset = HARDataset(X_train, Y_train)
+val_dataset = HARDataset(X_val, Y_val)
+test_dataset = HARDataset(X_test, Y_test)
 
  #stampo il dataset di training e di test a livello di dimensioni
 logger.info("Lunghezza dataset di training: %s", len(train_dataset))
@@ -369,10 +382,10 @@ logger.debug(f"Tipo di test_dataset: {type(test_dataset)}")
 
 
 
-BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_ball_e2e.pkl")
-BEST_SCORE_PATH = os.path.join(REPORTS_DIR, "best_score_ball_e2e.txt")
+BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_car_e2e.pkl")
+BEST_SCORE_PATH = os.path.join(REPORTS_DIR, "best_score_car_e2e.txt")
 
-best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_e2e.csv')
+best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_car_e2e.csv')
 if os.path.exists(best_hyperparams_file):
     logger.debug(f"Carico i migliori iperparametri da {best_hyperparams_file}")
     best_hyperparameters=pd.read_csv(best_hyperparams_file).iloc[0].to_dict()
@@ -433,7 +446,7 @@ else:
     best_hyperparameters = study.best_params
     best_hyperparameters['best_f1_score'] = study.best_value
     best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_ball_e2e.csv'), index=False)
+    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_car_e2e.csv'), index=False)
 
     best_lr = study.best_params['lr']
     best_batch_size = study.best_params['batch_size']
@@ -445,9 +458,9 @@ plot_CM(
     mdl_class=DeepConvLSTM,
     mdl_weights=BEST_MODEL_PATH,
     X= X_train,
-    Y=Y_train_mapped,
+    Y=Y_train,
     batch_size=best_batch_size,
-    figure_name="cm_train_best_ball_e2e"
+    figure_name="cm_train_best_car_e2e"
 )
 
 #STAMPO CM DELL'ALLENAMENTO SUL VAL SET
@@ -455,13 +468,13 @@ plot_CM(
     mdl_class=DeepConvLSTM,
     mdl_weights=BEST_MODEL_PATH,
     X=X_val,
-    Y=Y_val_mapped,
+    Y=Y_val,
     batch_size=best_batch_size,
-    figure_name="cm_val_best_hyp_ball_e2e"
+    figure_name="cm_val_best_hyp_car_e2e"
 )
 
 # Creo modello e carico pesi del miglior modello (trovato prima in optuna)
-model = DeepConvLSTM(n_classes=4)
+model = DeepConvLSTM(n_classes=10)
 
 # Carico i pesi del miglior modello trovato
 model.load_state_dict(torch.load(BEST_MODEL_PATH))
@@ -473,7 +486,12 @@ model.eval()
 test_loader = DataLoader(test_dataset, batch_size=best_batch_size, drop_last=True, shuffle=True)
 
 # Eseguo l'eval sul test set usando i migliori iperparametri
-test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(model, test_loader, figure_name= "cm_test_best_hyp_ball_e2e",  save_confusion_matrix=True, save_f1_score= True)
+test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(model, test_loader, figure_name= "cm_test_best_hyp_car_e2e",  save_confusion_matrix=True, save_f1_score= True)
+
+
+
+
+
 
 
 

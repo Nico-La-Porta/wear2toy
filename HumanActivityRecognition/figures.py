@@ -37,18 +37,18 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
         # Carico il modello e i pesi
         n_classes = len(np.unique(Y)) #calcolo numero di classi andando a vedere le etichette uniche in y (etichette vere)
         logger.debug(f"Number of classes: {n_classes}")
-        #Cerco di caricare prima l'intero modello
-        try:
-            model = torch.load(mdl_weights, map_location=device)
-            logger.info(f"Loaded complete model from {mdl_weights}")
-        except Exception:
- 
-            model = mdl_class(n_classes=n_classes) # Inizializzo il modello con il numero di classi corretto: creo un'istanza del modello
-            model.load_state_dict(torch.load(mdl_weights, map_location=device)) # Carico i pesi del modello
-            logger.info(f"Loaded model state_dict from {mdl_weights}")
-       
+        model = mdl_class(n_classes=n_classes, nb_sensor_channels=9, sliding_window_length=100)
+        # Carico i psi NEL modello, non sull'OrderedDict
+        state_dict = torch.load(mdl_weights, map_location=device)
+        model.load_state_dict(state_dict, strict=False)  # strict=False per sicurezza
+        # Sposto il MODELLO sul device, non lo state_dict
         model.to(device)
         model.eval() # Imposto il modello in modalità di valutazione e quindi non calcolo i gradienti e disabilito il dropout
+        
+        logger.info(f"Loaded complete model from {mdl_weights}")
+      
+       
+
  
         # Dataset e DataLoader
         dataset = HARDataset(X, Y)
@@ -164,4 +164,6 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
         return None, None
     except Exception as e:
         logger.error(f"Si è verificato un errore durante la creazione della matrice di confusione: {str(e)}")
+        import traceback
+        logger.error(f"Traceback completo: {traceback.format_exc()}")
         return None, None

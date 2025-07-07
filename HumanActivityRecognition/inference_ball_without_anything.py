@@ -15,6 +15,9 @@ import torch
 import torch.nn as nn
 import train_with_cm
 import matplotlib.pyplot as plt
+from collections import defaultdict
+import logging
+logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 #definisco il path da cui leggere i .csv
 
 from utils.log_config import logger
@@ -107,7 +110,6 @@ for action_id in df_ball['action_id'].unique():
     logger.debug(f"Salvato il dataframe df_ball_action_{action_id}.csv")
 
 
-
 #applico sliding window con la funzion process_csv
 nb_sensor_channels = 9
 sliding_window_length = 100
@@ -121,18 +123,16 @@ kid_action_counts = {}
 
 for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.split('_')[1] == 'ball']:
     file_path = os.path.join(path, action_file)
-    action_id = action_file.split('_')[-2]
+    action = action_file.split('_')[-1].split('.')[0]
 
-    logger.info(f"Processando file normalizzato: {action_file}")
-
-    X_windows, Y_windows, kid_id_action_dict, kid_id_windows = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
+    X_windows, Y_windows, kid_id_action_dict = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
 
     X.append(X_windows)
     Y.append(Y_windows)
 
 
-    logger.info(f"Numero  totale di finestre per l'azione {action_id}:{len(X_windows)}")
-    kid_action_counts[f"ball_action_{action_id}"] = kid_id_action_dict #aggiungo il dizionario al dizionario principale per tenere traccia del numero di finestre per ogni bambino per ogni azione, ogni ball_action è una chiave e il valore è un dizionario con il numero di finestre per ogni bambino
+    logger.info(f"Numero  totale di finestre per l'azione {action}:{len(X_windows)}")
+    kid_action_counts[f"ball_action_{action}"] = kid_id_action_dict #aggiungo il dizionario al dizionario principale per tenere traccia del numero di finestre per ogni bambino per ogni azione, ogni ball_action è una chiave e il valore è un dizionario con il numero di finestre per ogni bambino
     logger.info(f"Contenuto finale di kid_action_counts: {kid_action_counts}") #per veere quante finestre per ogni azione e per ogni bambino sono state elaborte 
 
 
@@ -146,10 +146,6 @@ logger.info(f"Dimensioni di X finale: {X.shape}")
 logger.info(f"Dimensioni di Y finale: {Y.shape}")
 
 
-logger.info("Pipeline di normalizzazione e sliding window completata!")
-
-
-from collections import defaultdict
 split_ratio_train = 0.7
 split_ratio_val = 0.15
 split_ratio_test = 0.15
@@ -248,15 +244,6 @@ logger.info("Train shape: %s %s", X_train.shape, Y_train.shape)
 logger.info("Val shape: %s %s", X_val.shape, Y_val.shape)
 logger.info("Test shape: %s %s", X_test.shape, Y_test.shape)
 
-# Flatten etichette se necessario
-Y_train = Y_train.flatten()
-Y_val = Y_val.flatten()
-Y_test = Y_test.flatten()
-
-logger.info("Train shape: %s %s", X_train.shape, Y_train.shape)
-logger.info("Val shape: %s %s", X_val.shape, Y_val.shape)
-logger.info("Test shape: %s %s", X_test.shape, Y_test.shape)
-
 # Conto quante finestre per ogni azione in train e test
 train_action_counts = defaultdict(list)
 test_action_counts = defaultdict(list)
@@ -267,67 +254,81 @@ for i, label in enumerate(Y_train):
 for i, label in enumerate(Y_test):
     test_action_counts[label].append(i)
 
+# Liste per nuovi dati aggiornati
+X_train_new, Y_train_new = list(X_train), list(Y_train)
+X_test_new, Y_test_new = list(X_test), list(Y_test)
 
-X_train_new = X_train.copy()
-Y_train_new = Y_train.copy()
-X_test_new = X_test.copy()
-Y_test_new = Y_test.copy()
-
-
-indices_to_remove_from_train = []
-windows_to_add_to_test = []
 
 azioni_modificate = 0
 
 for action in np.unique(Y):
-    train_ids = train_action_counts.get(action, [])
-    test_ids = test_action_counts.get(action, [])
+    train_ids = train_action_counts.get(action, []) #Indici delle finestre nel train mi servono per vedere se ho almeno 3 finestre
+    test_ids = test_action_counts.get(action, []) #Indici delle finestre nel test mi servono per vedere se ho almeno 1 finestra
 
     if len(test_ids) == 1 and len(train_ids) >= 3:
         idx_to_move = train_ids[-1]  # prendo l'ultima finestra di quella azione nel train
 
-        logger.debug(f"Azione {action} - Sposto la finestra con indice {idx_to_move} dal train al test")
-        logger.debug(f"Y_train[idx]: {Y_train[idx_to_move]}")
-        logger.debug(f"X_train[idx][:5]: {X_train[idx_to_move][:5]}")
-        logger.debug(f"Shape della finestra: {X_train[idx_to_move].shape}")
+        logger.debug(f"Azione {action} - Sposto la finestra con indice originale {idx_to_move} dal train al test")
+        logger.debug(f"Y_train[idx]: {Y_train_new[idx_to_move]}")
+        #logger.debug(f"X_train[idx][:5]: {X_train_new[idx_to_move][:5]}")  # primi 5 campioni della finestra
+        logger.debug(f"Shape della finestra: {X_train_new[idx_to_move].shape}")
 
-        # Salva la finestra da spostare
-        windows_to_add_to_test.append({
-            'X': X_train[idx_to_move].copy(),
-            'Y': Y_train[idx_to_move],
-            'original_idx': idx_to_move
-        })
-        
-        # Segna l'indice da rimuovere
-        indices_to_remove_from_train.append(idx_to_move)
-        
+        # Aggiungo l'indice della finestra spostata al test
+        test_indices_totali.append(train_indices_totali[train_ids[-1]])
+
+        # Rimuovo l'indice dalla lista degli indici di train
+        train_indices_totali.remove(train_indices_totali[train_ids[-1]])
+
+        # Sposto la finestra nel test
+        X_test_new.append(X_train_new[idx_to_move])
+        Y_test_new.append(Y_train_new[idx_to_move])
+
+        #verifico che la finestra sia stata spostata correttamente
+        logger.debug(f"Y_test[idx]: {Y_test_new[-1]}")
+        logger.debug(f"X_test[idx][:5]: {X_test_new[-1][:5]}")  # primi 5 campioni della finestra
+        logger.debug(f"Shape della finestra: {X_test_new[-1].shape}")
+
+        # La rimuovo dal train
+        del X_train_new[idx_to_move]
+        del Y_train_new[idx_to_move]
+
         azioni_modificate += 1
         logger.info(f"Azione {action}: spostata una finestra da train a test per bilanciare meglio")
 
-
-if indices_to_remove_from_train:
-    # Ordino gli indici in ordine decrescente per rimuoverli dalla fine
-    indices_to_remove_from_train.sort(reverse=True)
-    
-    # Rimuovo gli elementi dal train
-    X_train_new = np.delete(X_train_new, indices_to_remove_from_train, axis=0)
-    Y_train_new = np.delete(Y_train_new, indices_to_remove_from_train, axis=0)
-    
-    # Aggiunoi gli elementi al test
-    for window_data in windows_to_add_to_test:
-        X_test_new = np.vstack([X_test_new, window_data['X'].reshape(1, *window_data['X'].shape)])
-        Y_test_new = np.append(Y_test_new, window_data['Y'])
-        
-        logger.debug(f"Aggiunta finestra al test - Y: {window_data['Y']}")
-        logger.debug(f"Shape della finestra aggiunta: {window_data['X'].shape}")
-
-# Aggiorno le variabili finali
-X_train = X_train_new
-Y_train = Y_train_new
-X_test = X_test_new
-Y_test = Y_test_new
+# Converto di nuovo in numpy
+X_train = np.array(X_train_new)
+Y_train = np.array(Y_train_new)
+X_test = np.array(X_test_new)
+Y_test = np.array(Y_test_new)
 
 logger.info("Azioni modificate: %d", azioni_modificate)
+
+
+# Salvo gli indici finali dopo il bilanciamento
+np.savez(f"{path}\\split_final_indices_ball.npz",
+         train=np.array(train_indices_totali),
+         val=np.array(val_indices_totali),
+         test=np.array(test_indices_totali))
+
+# Stampa controllo
+logger.info("Train shape: %s %s", X_train.shape, Y_train.shape)
+logger.info("Val shape: %s %s", X_val.shape, Y_val.shape)
+logger.info("Test shape: %s %s", X_test.shape, Y_test.shape)
+
+
+"""# Ricarico gli indici salvati per verificare
+loaded_data = np.load(f"{path}\\split_final_indices_ball.npz")
+
+# Estraggo gli indici delle finestre
+train_indices_totali = loaded_data['train']
+val_indices_totali = loaded_data['val']
+test_indices_totali = loaded_data['test']
+
+# Stampa per verificare
+logger.info(f"Train indices: {train_indices_totali.shape}")
+logger.info(f"Val indices: {val_indices_totali.shape}")
+logger.info(f"Test indices: {test_indices_totali.shape}")"""
+
 
 # Trova tutte le etichette uniche presenti nei dati
 unique_labels = np.unique(Y_train)
@@ -366,10 +367,10 @@ logger.debug(f"Tipo di train_dataset: {type(train_dataset)}")
 logger.debug(f"Tipo di val_dataset: {type(val_dataset)}")
 logger.debug(f"Tipo di test_dataset: {type(test_dataset)}")
 
-BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_inference_ball_without_anythinh.pkl")
-BEST_SCORE_PATH = os.path.join(REPORTS_DIR, "best_score_inference_ball_without_anythinh.txt")
+BEST_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_inference_ball_without_anything.pkl")
+BEST_SCORE_PATH = os.path.join(REPORTS_DIR, "best_score_inference_ball_without_anything.txt")
 
-best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_inference_inference_ball_without_anythinh.csv')
+best_hyperparams_file = os.path.join(REPORTS_DIR, 'best_hyperparameters_inference_inference_ball_without_anything.csv')
 if os.path.exists(best_hyperparams_file):
     logger.debug(f"Carico i migliori iperparametri da {best_hyperparams_file}")
     best_hyperparameters=pd.read_csv(best_hyperparams_file).iloc[0].to_dict()
@@ -378,7 +379,7 @@ if os.path.exists(best_hyperparams_file):
 
 else:
     def objective(trial):
-        # DefiniscO gli iperparametri da ottimizzare
+        # Definisco gli iperparametri da ottimizzare
         lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
         batch_size = trial.suggest_categorical('batch_size', [2,4,6])
 
@@ -448,7 +449,7 @@ else:
     best_hyperparameters = study.best_params
     best_hyperparameters['best_f1_score'] = study.best_value
     best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
-    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_inference_inference_ball_without_anythinh.csv'), index=False)
+    best_hyperparameters_df.to_csv(os.path.join(REPORTS_DIR, 'best_hyperparameters_inference_inference_ball_without_anything.csv'), index=False)
 
     best_lr = study.best_params['lr']
     best_batch_size = study.best_params['batch_size']
@@ -472,7 +473,7 @@ plot_CM(
     X= X_train,
     Y=Y_train_mapped,
     batch_size=best_batch_size,
-    figure_name="cm_train_best_hyp_inference_optuna_inference_ball_without_anythinh"
+    figure_name="cm_train_best_hyp_inference_optuna_inference_ball_without_anything"
 )
 
 #STAMPO CM DELL'ALLENAMENTO SUL VAL SET
@@ -482,29 +483,20 @@ plot_CM(
     X=X_val,
     Y=Y_val_mapped,
     batch_size=best_batch_size,
-    figure_name="cm_val_best_hyp_inference_optuna_inference_ball_without_anythinh"
+    figure_name="cm_val_best_hyp_inference_optuna_inference_ball_without_anything"
 )
 
 # Creo modello e carico pesi del miglior modello (trovato prima in optuna)
 model = DeepConvLSTM(n_classes=4)
 
 # Rimuovo la testa originale, in modo da non caricare i pesi associati
-model.load_state_dict(
-    torch.load(
-        BEST_MODEL_PATH,
-        map_location=torch.device('cpu')
-    ),
-    strict=False
-)
+# Carico i pesi del miglior modello trovato
+model.load_state_dict(torch.load(BEST_MODEL_PATH))
 
 
-# Congelo tutti i parametri tranne quelli della testa (fully connected)
-for param in model.parameters():
-        param.requires_grad = False  # Congela tutti i pesi
+model.eval()
 
 
-for name, param in model.named_parameters():
-    print(f"{name} requires_grad={param.requires_grad}")
 
 
 
@@ -514,7 +506,7 @@ test_loader = DataLoader(test_dataset, batch_size=best_batch_size, drop_last=Tru
 
 
 # Eseguo l'eval sul test set usando i migliori iperparametri
-test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(model, test_loader, figure_name= "cm_test_best_hyp_optuna_inference_ball_without_anythinh", save_confusion_matrix=True)
+test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(model, test_loader, figure_name= "cm_test_best_hyp_optuna_inference_ball_without_anything", save_confusion_matrix=True, save_f1_score= True)
 
 
 

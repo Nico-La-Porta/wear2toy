@@ -303,6 +303,66 @@ def check_scaled_data(original_dataset, scaled_dataset, dataset_name):
     logger.info(f"Media DOPO: {scaled_mean}, Deviazione Standard DOPO: {scaled_std}")
 
 
+def remove_classes_from_car_data(X, Y, classes_to_remove):
+    """
+    Rimuove le finestre appartenenti alle classi specificate dal dataset car.
+    
+    Args:
+        X: Array numpy con le finestre di dati (shape: [n_windows, window_length, n_features])
+        Y: Array numpy con le etichette (shape: [n_windows])
+        classes_to_remove: Lista di action_id da rimuovere (es. [1, 3, 5])
+    
+    Returns:
+        X_filtered: Dataset X senza le classi rimosse
+        Y_filtered: Dataset Y senza le classi rimosse
+        removed_stats: Dizionario con statistiche delle rimozioni
+    """
+    logger.info(f" Inizio rimozione classi: {classes_to_remove}")
+    logger.info(f"Dimensioni originali - X: {X.shape}, Y: {Y.shape}")
+    
+    # Statistiche iniziali
+    unique_classes_before = np.unique(Y)
+    logger.info(f"Classi presenti prima: {unique_classes_before}")
+    
+    # Creo maschera per mantenere solo le classi NON da rimuovere
+    mask = ~np.isin(Y, classes_to_remove)
+    
+    # Applica la maschera
+    X_filtered = X[mask]
+    Y_filtered = Y[mask]
+    
+    # Statistiche finali
+    unique_classes_after = np.unique(Y_filtered)
+    removed_windows = len(Y) - len(Y_filtered)
+    
+    # Statistiche dettagliate per classe rimossa
+    removed_stats = {}
+    for class_id in classes_to_remove:
+        count_removed = np.sum(Y == class_id)
+        removed_stats[class_id] = count_removed
+        logger.info(f"Classe {class_id}: rimosse {count_removed} finestre")
+    
+    logger.info(f"Classi presenti dopo: {unique_classes_after}")
+    logger.info(f"Dimensioni finali - X: {X_filtered.shape}, Y: {Y_filtered.shape}")
+    logger.info(f"Totale finestre rimosse: {removed_windows}")
+    
+    return X_filtered, Y_filtered, removed_stats
+
+def get_class_distribution(Y, dataset_name="Dataset"):
+    """
+    Mostra la distribuzione delle classi nel dataset.
+    
+    Args:
+        Y: Array delle etichette
+        dataset_name: Nome del dataset per il log
+    """
+    unique, counts = np.unique(Y, return_counts=True)
+    logger.info(f"Distribuzione classi in {dataset_name}:")
+    for class_id, count in zip(unique, counts):
+        percentage = (count / len(Y)) * 100
+        logger.info(f"Classe {class_id}: {count} finestre ({percentage:.1f}%)")
+    
+    return dict(zip(unique, counts))
 
 """def main():
     
