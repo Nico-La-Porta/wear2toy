@@ -1,4 +1,5 @@
 import os
+import pandas as pd 
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,6 +8,8 @@ import seaborn as sns
 from app_config import MODELS_DIR, FIGURES_DIR, REPORTS_DIR
 from utils import check_gpu
 from utils.log_config import logger
+from sklearn.utils.class_weight import compute_class_weight
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -28,6 +31,24 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return False"""
 
 
+def calculate_class_weights(y_labels, num_classes):
+    """
+    Calcola i pesi delle classi per bilanciare il dataset
+    """
+    
+    # Calcolo i pesi usando sklearn:  peso_classe_i = n_samples / (n_classes * n_samples_classe_i)
+    class_weights = compute_class_weight( 
+        'balanced',
+        classes=np.arange(num_classes),
+        y=y_labels
+    )
+    
+    # Converte in tensor PyTorch
+    class_weights_tensor = torch.FloatTensor(class_weights)
+    
+    logger.info(f"Pesi delle classi calcolati: {class_weights}")
+    
+    return class_weights_tensor
 
 class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
@@ -210,7 +231,7 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
 
 
 
-def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False, save_f1_score: bool = True, criterion=None):
+def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False, save_f1_score: bool = True, save_predictions_csv: bool = True, criterion=None):
     net.eval()
     if criterion is None:
         criterion = torch.nn.CrossEntropyLoss()
@@ -255,6 +276,23 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
     f1_per_class = f1_score(all_test_labels, all_test_preds, average=None)
 
     logger.info(f"Evaluation Results - Loss: {mean_loss:.4f}, Accuracy: {mean_accuracy:.4f}, F1-Score ({f1_average}): {f1_scores[f1_average]:.4f}")
+    
+    #DataFrame con true e predicted
+    predictions_df = pd.DataFrame({
+        'true': all_test_labels,
+        'predicted': all_test_preds
+    })
+
+
+    # Salvataggio opzionale del CSV
+    if save_predictions_csv:
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        pred_filename = figure_name[2:] if len(figure_name) > 2 else figure_name
+        pred_path = os.path.join(REPORTS_DIR, f"predictions_{pred_filename}.csv")
+        predictions_df.to_csv(pred_path, index=False)
+        logger.info(f"Predictions saved to: {pred_path}")
+
+
     # Salvataggio F1-score
     if save_f1_score:
         # Assicurati che la directory esista
