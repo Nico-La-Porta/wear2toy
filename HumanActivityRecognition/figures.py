@@ -182,7 +182,7 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
 
 
 
-def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ball", save_path=None):
+def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ball", save_path=None, class_names=None):
     """
     Combina le confusion matrix di tutti i fold in una singola CM finale
     
@@ -234,15 +234,22 @@ def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ba
     # Ottiengo  classi
     classes = np.unique(np.concatenate([all_true_labels, all_predicted_labels]))
     
-    
+    if class_names:
+        tick_labels = class_names
+    else:
+        tick_labels = [f'Class_{i}' for i in classes]
+
     plt.figure(figsize=(10, 8))
     sns.heatmap(cm_combined, annot=True, fmt='d', cmap='Greys', 
-                xticklabels=classes, yticklabels=classes,
+                xticklabels=tick_labels, yticklabels=tick_labels,
                 cbar_kws={'label': 'Count'})
     plt.title(f'Combined Confusion Matrix - {num_folds} Fold CV ({toy_name.upper()})')
     plt.xlabel('Predicted')
     plt.ylabel('True')
-    
+    plt.xticks(rotation=45, ha='right')
+    plt.yticks(rotation=0)
+
+
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Confusion matrix salvata in: {save_path}")
@@ -254,7 +261,7 @@ def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ba
     
     # Report di classificazione
     report = classification_report(all_true_labels, all_predicted_labels, 
-                                 target_names=[f'Class_{i}' for i in classes])
+                                 target_names=tick_labels if class_names else [f'Class_{i}' for i in classes])
     
     print("\n" + "="*50)
     print("CONFUSION MATRIX COMBINATA")
@@ -559,6 +566,117 @@ def create_side_by_side_bar_chart(Y_train, Y_test, toy_name="CAR", save_path=Non
     for i, cls in enumerate(all_classes):
         print(f"  Class C{cls}: Train={train_counts[i]} ({train_percentages[i]:.1f}%), "
               f"Test={test_counts[i]} ({test_percentages[i]:.1f}%)")
+
+def create_single_distribution_bar_chart(Y, toy_name="Dataset", save_path=None, title_suffix=" ", use_class_prefix=True):
+    """
+    Crea un bar diagram publication-ready per una singola distribuzione
+    
+    Parameters:
+    - Y: array delle etichette
+    - toy_name: nome del dataset/giocattolo 
+    - save_path: percorso per salvare il grafico (opzionale)
+    - title_suffix: suffisso per il titolo (es. "Complete Dataset", "Training Set", etc.)
+    """
+    
+    # Calcola la distribuzione
+    distribution = Counter(Y)
+    
+    # Ottieni tutte le classi uniche ordinate
+    all_classes = sorted(distribution.keys())
+    
+    # Calcola il totale
+    total_samples = len(Y)
+    
+    # Prepara i dati per il grafico
+    counts = [distribution[cls] for cls in all_classes]
+    percentages = [(count / total_samples) * 100 for count in counts]
+    
+    # Crea il grafico con stile LNCS
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Colori professionali
+    colors = ['#2C3E50', '#E74C3C', '#3498DB', '#27AE60', '#F39C12', '#9B59B6', '#1ABC9C', '#34495E']
+    bar_colors = [colors[i % len(colors)] for i in range(len(all_classes))]
+    
+    # Crea le barre
+    bars = ax.bar(range(len(all_classes)), percentages, color=bar_colors, 
+                  alpha=0.8, edgecolor='black', linewidth=0.8, hatch='///')
+    
+    # Personalizza il grafico per LNCS
+    ax.set_xlabel('Activity Class', fontsize=16, fontweight='bold')
+    ax.set_ylabel('Percentage (%)', fontsize=16, fontweight='bold')
+    ax.set_title(f'{toy_name}  {title_suffix}', fontsize=16, fontweight='bold', pad=20)
+    ax.set_xticks(range(len(all_classes)))
+    if use_class_prefix and all(isinstance(cls, (int, float)) for cls in all_classes):
+        # Se sono numeri, aggiungi "C"
+        ax.set_xticklabels([f'C{cls}' for cls in all_classes], fontsize=12)
+    else:
+        # Se sono stringhe (nomi azioni), usali direttamente
+        ax.set_xticklabels(all_classes, fontsize=12, rotation=45, ha='right')
+    ax.tick_params(axis='y', labelsize=12)
+    
+    # Griglia professionale
+    ax.grid(axis='y', alpha=0.3, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
+    
+    # Rimuovi spines superiori e destri
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(0.8)
+    ax.spines['bottom'].set_linewidth(0.8)
+    
+    # Aggiungi percentuali sopra le barre
+    for i, (bar, percentage, count) in enumerate(zip(bars, percentages, counts)):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.8,
+               f'{percentage:.1f}%\n({count})', ha='center', va='bottom', 
+               fontsize=10, fontweight='bold')
+    
+    # Layout professionale
+    plt.tight_layout()
+    
+    # Salva il grafico in formato publication-ready
+    if save_path:
+        base_path = save_path.rsplit('.', 1)[0] if '.' in save_path else save_path
+        
+        # PDF per LaTeX (preferito per LNCS)
+        plt.savefig(f"{base_path}.pdf", dpi=300, bbox_inches='tight', 
+                   format='pdf', facecolor='white', edgecolor='none')
+        
+        # PNG ad alta risoluzione
+        plt.savefig(f"{base_path}.png", dpi=300, bbox_inches='tight', 
+                   format='png', facecolor='white', edgecolor='none')
+        
+        print(f"Grafico salvato in: {base_path}.[pdf|png]")
+
+         # SVG vettoriale
+        plt.savefig(f"{base_path}.svg", bbox_inches='tight', 
+                   format='svg', facecolor='white', edgecolor='none')
+        
+        print(f"Grafico salvato in: {base_path}.[pdf|png|svg]")
+    
+    plt.show()
+    
+    # Stampa statistiche per il paper
+    print(f"\n=== {toy_name} - {title_suffix} Statistics ===")
+    print(f"Total samples: {total_samples}")
+    print(f"Number of classes: {len(all_classes)}")
+    
+    # Stampa dettaglio per classe
+    print("\nClass Details:")
+    for i, cls in enumerate(all_classes):
+        print(f"  Class C{cls}: {counts[i]} samples ({percentages[i]:.1f}%)")
+    
+    # Identifica classi problematiche
+    min_count = min(counts)
+    max_count = max(counts)
+    if min_count < 10:
+        rare_classes = [all_classes[i] for i, count in enumerate(counts) if count < 10]
+        print(f"\nWARNING: Classes with <10 samples: {rare_classes}")
+    
+    if max_count / min_count > 10:
+        print(f"WARNING: High class imbalance detected! Ratio: {max_count/min_count:.2f}")
+    
+    return distribution
 
 
 # Esempio di utilizzo

@@ -105,6 +105,7 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
         train_f1score = 0 #variabile per l'f1-score di train
         for inputs, targets in train_loader: 
             inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
+            targets = targets.view(-1)
             batch_size = inputs.size(0)
             h = net.init_hidden(batch_size)
             opt.zero_grad()
@@ -141,7 +142,7 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
                     #val_h = tuple([each.data for each in val_h])
                     net.to(device)
                     inputs, targets = inputs.to(device), targets.to(device)
-
+                    targets = targets.view(-1)
                     output, val_h = net(inputs, val_h, batch_size)
                     val_loss = criterion(output, targets.long())
                     val_losses.append(val_loss.item())
@@ -231,7 +232,7 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
 
 
 
-def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False, save_f1_score: bool = True, save_predictions_csv: bool = True, criterion=None):
+def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False, save_f1_score: bool = True, save_predictions_csv: bool = True, criterion=None, labels_dict=None):
     net.eval()
     if criterion is None:
         criterion = torch.nn.CrossEntropyLoss()
@@ -284,6 +285,12 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
     })
 
 
+    # Aggiungi nomi delle azioni se il mapping è fornito
+    if labels_dict:
+        predictions_df['true_action'] = [labels_dict.get(label, f'Unknown_{label}') for label in all_test_labels]
+        predictions_df['predicted_action'] = [labels_dict.get(label, f'Unknown_{label}') for label in all_test_preds]
+
+
     # Salvataggio opzionale del CSV
     if save_predictions_csv:
         os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -321,9 +328,18 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
     if save_confusion_matrix:
         cm = confusion_matrix(all_test_labels, all_test_preds)
         plt.figure(figsize=(16, 14), dpi=300)
+        
+        # Determina le etichette per gli assi
+        if labels_dict:
+            # Usa i nomi delle azioni
+            tick_labels = [labels_dict.get(i, f'Class_{i}') for i in range(len(np.unique(all_test_labels + all_test_preds)))]
+        else:
+            # Fallback ai nomi del dataset
+            tick_labels = getattr(test_loader.dataset, 'classes', [f'Class_{i}' for i in range(cm.shape[0])])
+        
         sns.heatmap(cm, annot=True, fmt="d", cmap="Greys",  # in scala di grigi
-                    xticklabels=test_loader.dataset.classes,
-                    yticklabels=test_loader.dataset.classes,
+                    xticklabels=tick_labels,
+                    yticklabels=tick_labels,
                     linewidths=0.3, square=True, annot_kws={"size": 10}, cbar=True)
         plt.xticks(rotation=45, ha='right', fontsize=12)
         plt.yticks(rotation=0, fontsize=12)

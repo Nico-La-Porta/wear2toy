@@ -81,7 +81,9 @@ class DeepConvLSTM(nn.Module):
     
     #INPUT= un tensoore di dimensioni [batchsize, NB_SENSOR_CHANNELS.sequence_lenght]
     def __init__(self, n_hidden=128, n_layers=1, n_filters=64, 
-                 n_classes=29, filter_size=5, drop_prob=0.5,nb_sensor_channels=9, sliding_window_length=100):
+                 n_classes=29, filter_size=5, drop_prob=0.5,
+                 nb_sensor_channels=9, sliding_window_length=100,
+                 single_fc = True):
         super(DeepConvLSTM, self).__init__() #inizializza iperparametri del modello
         self.drop_prob = drop_prob
         self.n_layers = n_layers
@@ -104,13 +106,20 @@ class DeepConvLSTM(nn.Module):
         
         #livello completamente connesso che mappa le n_hidden unità nascoste alla dimensione di output n_classes
         #l'output ha dimensioni (batchsize, n_classes) che rappresenta la probabilità per ciascuna delle classi di attività
-        self.fc = nn.Linear(n_hidden, n_classes)
+        if single_fc:
+            self.classification_head = nn.Linear(n_hidden, n_classes)
+        else:
+            self.classification_head = nn.Sequential(
+                nn.Linear(n_hidden, n_hidden/2),
+                nn.ReLU(),
+                nn.Linear(n_hidden/2, n_classes)
+            )
 
         #applica una probabilità di drop_prob per "spegnere" casualmente alcune attività durante l'allenamento riducendo così il rischio di overfittin
         self.dropout = nn.Dropout(drop_prob)
 
 
-    def forward(self, x, hidden, batch_size):
+    def forward(self, x, hidden, batch_size, single_fc=True):
 
         #print(f"Input iniziale al modello: {x.shape}")
         #-1 sta calcolando automaticamente la dimensione rimanente (batchsize),
@@ -146,14 +155,19 @@ class DeepConvLSTM(nn.Module):
         #print(f"Dopo dropout: {x.shape}")
         
         #passa l'output attraverso il layer fully connected, mappando x a dimensioni [batchsize*sequence_lenght, n_classes]
-        x = self.fc(x)
-        #print(f"Dopo fully connected: {x.shape}")
+        x = self.classification_head(x)
         
         #ridimensiona l'output per ottenere [batchsize, lunghezzasequenza, n_classes] e mantiene solo l'ultimo step temporale (-1,:)
         out = x.reshape(batch_size, -1, self.n_classes)[:,-1,:]
-        
-        
-        # il risultato è un tensore di dimensioni batchsize, n_classes che rappresenta la previsione finale per ciascuna classe di attività ne batch
+        """# Se hai classification_head:
+        x_last = x[:, -1, :]  # shape: (batch_size, n_hidden)
+        x_last = self.dropout(x_last)
+
+        if hasattr(self, "classification_head"):
+            out = self.classification_head(x_last)
+        else:
+            out = self.fc(x_last)"""
+
         return out, hidden
     
 

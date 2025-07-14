@@ -56,6 +56,90 @@ def compute_mean_std(trs_data: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return means, stds
 
 
+def compute_dataframe_mean_std(df: 'pd.DataFrame') -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calcola la media e la deviazione standard per ogni colonna dei sensori del DataFrame.
+    Le colonne non-sensore (come activity, kid_id, etc.) vengono escluse.
+    
+    Args:
+        df: DataFrame pandas con i dati dei sensori
+        
+    Returns:
+        Tuple contenente (means, stds) per le colonne dei sensori
+    """
+    
+    # Identifico le colonne delle feature (sensori)
+    sensor_columns = [col for col in df.columns if col in [
+        'Accel_LN_X', 'Accel_LN_Y', 'Accel_LN_Z',
+        'Gyro_X', 'Gyro_Y', 'Gyro_Z', 'Mag_X', 'Mag_Y', 'Mag_Z'
+    ]]
+    
+    logger.debug(f"Colonne sensori trovate: {sensor_columns}")
+    
+    if not sensor_columns:
+        logger.warning("Nessuna colonna sensore trovata nel DataFrame")
+        return np.array([]), np.array([])
+    
+    # Estraggo solo le colonne dei sensori
+    sensor_data = df[sensor_columns].values
+    logger.debug(f"Shape of DataFrame sensor features: {sensor_data.shape}")
+    
+    # Calcolo media e deviazione standard
+    means = np.mean(sensor_data, axis=0)
+    stds = np.std(sensor_data, axis=0)
+    stds[stds == 0] = 1e-6  # evita divisione per zero
+    
+    logger.debug(f"Means shape: {means.shape}, Stds shape: {stds.shape}")
+    logger.info(f"Calcolate statistiche per {len(sensor_columns)} colonne sensori")
+    
+    return means, stds
+
+
+def compute_dataframe_median_iqr(df: 'pd.DataFrame') -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calcola la mediana e l'IQR per ogni colonna dei sensori del DataFrame.
+    Le colonne non-sensore (come activity, kid_id, etc.) vengono escluse.
+    
+    Args:
+        df: DataFrame pandas con i dati dei sensori
+        
+    Returns:
+        Tuple contenente (medians, iqr) per le colonne dei sensori
+    """
+    import pandas as pd
+    
+    # Identifico le colonne delle feature (sensori)
+    sensor_columns = [col for col in df.columns if col in [
+        'Accel_LN_X', 'Accel_LN_Y', 'Accel_LN_Z',
+        'Gyro_X', 'Gyro_Y', 'Gyro_Z', 'Mag_X', 'Mag_Y', 'Mag_Z'
+    ]]
+    
+    logger.debug(f"Colonne sensori trovate: {sensor_columns}")
+    
+    if not sensor_columns:
+        logger.warning("Nessuna colonna sensore trovata nel DataFrame")
+        return np.array([]), np.array([])
+    
+    # Estraggo solo le colonne dei sensori
+    sensor_data = df[sensor_columns].values
+    logger.debug(f"Shape of DataFrame sensor features: {sensor_data.shape}")
+    
+    # Calcolo mediana e IQR
+    medians = np.median(sensor_data, axis=0)
+    q75 = np.percentile(sensor_data, 75, axis=0)
+    q25 = np.percentile(sensor_data, 25, axis=0)
+    iqr = q75 - q25
+    iqr[iqr == 0] = 1e-6  # per evitare divisioni per zero
+    
+    logger.debug(f"Medians shape: {medians.shape}, IQR shape: {iqr.shape}")
+    logger.info(f"Calcolate statistiche robuste per {len(sensor_columns)} colonne sensori")
+    
+    return medians, iqr
+
+
+
+
+
 
 def normalize_each_recording_med_iqr(dataset_labeled: List[Dict[str, Any]], medians: np.ndarray, iqr: np.ndarray) -> List[Dict[str, Any]]:
     normalized_dataset = []
@@ -141,6 +225,44 @@ def normalize_dataframe_mean_std(df: 'pd.DataFrame', means: np.ndarray, stds: np
     logger.info(f"DataFrame normalizzato - Shape: {df_normalized.shape}")
     return df_normalized
 
+
+def normalize_dataframe_median_iqr(df: 'pd.DataFrame', medians: np.ndarray, iqr: np.ndarray) -> 'pd.DataFrame':
+    """
+    Normalizza un DataFrame usando le statistiche (mediana e IQR) calcolate sul TRS.
+    
+    Args:
+        df: DataFrame pandas con i dati dei sensori
+        medians: Array delle mediane per la normalizzazione
+        iqr: Array degli IQR per la normalizzazione
+    
+    Returns:
+        DataFrame normalizzato
+    """
+    import pandas as pd
+    
+    # Identifico le colonne delle feature (sensori)
+    sensor_columns = [col for col in df.columns if col in [
+        'Accel_LN_X', 'Accel_LN_Y', 'Accel_LN_Z',
+        'Gyro_X', 'Gyro_Y', 'Gyro_Z', 'Mag_X', 'Mag_Y', 'Mag_Z'
+    ]]
+    
+    # Verifico che abbiamo il numero corretto di feature
+    if len(sensor_columns) != len(medians):
+        logger.warning(f"Numero di colonne sensori ({len(sensor_columns)}) diverso da numero di mediane ({len(medians)})")
+        # Prendo solo le prime len(medians) colonne
+        sensor_columns = sensor_columns[:len(medians)]
+    
+    # Copio il DataFrame per non modificare l'originale
+    df_normalized = df.copy()
+    
+    # Normalizzo solo le colonne dei sensori
+    for i, col in enumerate(sensor_columns):
+        if i < len(medians):
+            df_normalized[col] = (df[col] - medians[i]) / iqr[i]
+            logger.debug(f"Normalizzata colonna {col} usando median={medians[i]:.6f}, iqr={iqr[i]:.6f}")
+    
+    logger.info(f"DataFrame normalizzato (median-IQR) - Shape: {df_normalized.shape}")
+    return df_normalized
 
 # Esempio di testing
 if __name__ == "__main__":
