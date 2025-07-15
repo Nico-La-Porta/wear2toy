@@ -636,8 +636,6 @@ plot_CM(
     Y=Y,
     batch_size=best_batch_size_final,
     figure_name="cm_final_kfold_Tcar_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone_all_data_trainval",
-    save_confusion_matrix=True,
-    save_f1_score=True,
     labels_dict=labels_dict,
 )
 
@@ -675,7 +673,6 @@ test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(
     figure_name=f"cm_holdout_kid_{KID_TEST}_final_eval_Tcar_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone",
     save_confusion_matrix=True,
     save_f1_score=True,
-    class_names=class_names,
     labels_dict=labels_dict
 )
 

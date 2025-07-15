@@ -517,5 +517,6 @@ cm_combined, y_true, y_pred = combine_kfold_confusion_matrices(
     fold_results_dir=REPORTS_DIR,
     num_folds=3,
     toy_name="spoon",
-    save_path="combined_cm_Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone.png"
+    save_path="combined_cm_Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone.png",
+    class_names=class_names,
 )

@@ -641,7 +641,6 @@ test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(
     figure_name=f"cm_holdout_kid_{KID_TEST}_final_eval_Tdoll_PTNnone_PTAnone_FTNnone_FTAnone",
     save_confusion_matrix=True,
     save_f1_score=True,
-    class_names=class_names,
     labels_dict=labels_dict
 )
 

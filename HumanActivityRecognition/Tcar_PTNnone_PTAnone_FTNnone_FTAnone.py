@@ -395,7 +395,7 @@ test_class_distribution = Counter(Y_Test)
 create_side_by_side_bar_chart(Y, Y_Test, "CAR", 
                               save_path=os.path.join(FIGURES_DIR, "car_distribution_sidebyside.png"))"""
 
-K_FOLDS = 3
+"""K_FOLDS = 3
 
 
 OPTUNA_RESULTS_PATH = os.path.join(REPORTS_DIR, 'kfold_results_Tcar_PTNnone_PTAnone_FTNnone_FTAnone.csv')
@@ -618,11 +618,18 @@ logger.info("=== PROCEDURA K-FOLD COMPLETATA ===")
 logger.info(f"Migliori iperparametri: {best_hyperparameters}")
 logger.info(f"F1 score medio K-Fold: {mean_f1:.4f} ± {std_f1:.4f}")
 logger.info(f"F1 score finale: {final_f1_score:.4f}")
-
+"""
 
 
 #VALUTO SUL KID MESSO DA PARTE
+# Carica i migliori iperparametri dal file CSV
+OPTUNA_HYPERPARAMS_PATH = os.path.join(REPORTS_DIR, 'best_hyperparameters_kfold_Tcar_PTNnone_PTAnone_FTNnone_FTAnone.csv')
+best_hyperparameters_df = pd.read_csv(OPTUNA_HYPERPARAMS_PATH)
+best_hyperparameters = best_hyperparameters_df.iloc[0].to_dict()
+best_batch_size_final = int(best_hyperparameters['batch_size'])
 
+# Definisci il path del modello finale
+FINAL_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_kfold_final_Tcar_PTNnone_PTAnone_FTNnone_FTAnone.pkl")
 #STAMPO TIPO DI X TEST E  TEST
 logger.info(f"Tipo di X_Test: {type(X_Test)}")
 logger.info(f"Dimensioni di X_Test: {X_Test.shape}")
@@ -634,9 +641,9 @@ test_3009_loader = DataLoader(test_3009_dataset, batch_size=best_batch_size_fina
 # Carica il miglior modello finale e valuta
 final_model = DeepConvLSTM()
 
-num_ftrs = model_final.classification_head.in_features
-model_final.classification_head = nn.Linear(num_ftrs, 10)
-model_final.set_n_classes(10)
+num_ftrs = final_model.classification_head.in_features
+final_model.classification_head = nn.Linear(num_ftrs, 10)
+final_model.set_n_classes(10)
 
 final_model.load_state_dict(torch.load(FINAL_MODEL_PATH, map_location='cpu'), strict=False)
 
@@ -648,8 +655,7 @@ test_loss, test_acc, test_f1 = train_with_cm.evaluate_model(
     figure_name=f"cm_holdout_kid_{KID_TEST}_final_eval_Tcar_PTNnone_PTAnone_FTNnone_FTAnone",
     save_confusion_matrix=True,
     save_f1_score=True,
-    class_names=class_names,
-    labels_dict=labels_dict
+    labels_dict=labels_dict,
 )
 
 logger.info(f"Valutazione finale sul kid {KID_TEST} - F1: {test_f1:.4f}")

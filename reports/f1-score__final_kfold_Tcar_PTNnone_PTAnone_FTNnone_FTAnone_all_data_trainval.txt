@@ -1,15 +1,15 @@
-F1-Score (Macro): 0.951296
-F1-Score (Micro): 0.968798
-F1-Score (Weighted): 0.968505
+F1-Score (Macro): 0.956708
+F1-Score (Micro): 0.984592
+F1-Score (Weighted): 0.984511
 
 F1-Score per classe:
-put down: 0.866142
-lift: 0.967033
-lower: 1.000000
-turn: 0.968421
-hold: 0.991905
-flip: 0.930233
-stack: 0.952381
-wheel turn: 0.929134
-drive: 0.958611
-move: 0.949097
+put down: 0.925373
+lift: 0.956522
+lower: 0.842105
+turn: 0.979167
+hold: 0.994032
+flip: 0.967033
+stack: 0.968750
+wheel turn: 0.970149
+drive: 0.986245
+move: 0.977707

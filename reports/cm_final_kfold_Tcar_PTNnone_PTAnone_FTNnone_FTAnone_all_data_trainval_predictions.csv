@@ -48,7 +48,6 @@ true_label,predicted_label,true_class,predicted_class
 4,4,hold,hold
 4,4,hold,hold
 4,4,hold,hold
-4,8,hold,drive
 4,4,hold,hold
 4,4,hold,hold
 4,4,hold,hold
@@ -172,217 +171,6 @@ true_label,predicted_label,true_class,predicted_class
 4,4,hold,hold
 4,4,hold,hold
 4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,8,hold,drive
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,8,hold,drive
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,8,hold,drive
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,4,hold,hold
-4,3,hold,turn
 4,4,hold,hold
 4,4,hold,hold
 4,4,hold,hold
@@ -998,6 +786,166 @@ true_label,predicted_label,true_class,predicted_class
 4,4,hold,hold
 4,4,hold,hold
 4,8,hold,drive
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,1,hold,lift
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,8,hold,drive
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,7,hold,wheel turn
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
 4,4,hold,hold
 4,4,hold,hold
 4,4,hold,hold
@@ -1170,14 +1118,63 @@ true_label,predicted_label,true_class,predicted_class
 4,4,hold,hold
 4,4,hold,hold
 4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
+4,4,hold,hold
 5,5,flip,flip
 5,5,flip,flip
 5,5,flip,flip
 5,5,flip,flip
 5,5,flip,flip
-5,1,flip,lift
-5,5,flip,flip
-5,1,flip,lift
 5,5,flip,flip
 5,5,flip,flip
 5,5,flip,flip
@@ -1189,7 +1186,6 @@ true_label,predicted_label,true_class,predicted_class
 5,5,flip,flip
 5,5,flip,flip
 5,5,flip,flip
-5,8,flip,drive
 5,5,flip,flip
 5,5,flip,flip
 5,5,flip,flip
@@ -1198,7 +1194,11 @@ true_label,predicted_label,true_class,predicted_class
 5,5,flip,flip
 5,5,flip,flip
 5,5,flip,flip
-5,8,flip,drive
+5,5,flip,flip
+5,5,flip,flip
+5,5,flip,flip
+5,5,flip,flip
+5,5,flip,flip
 5,5,flip,flip
 5,5,flip,flip
 5,5,flip,flip
@@ -1217,7 +1217,6 @@ true_label,predicted_label,true_class,predicted_class
 6,6,stack,stack
 6,6,stack,stack
 6,6,stack,stack
-6,0,stack,put down
 6,6,stack,stack
 6,6,stack,stack
 6,6,stack,stack
@@ -1237,7 +1236,8 @@ true_label,predicted_label,true_class,predicted_class
 6,6,stack,stack
 6,6,stack,stack
 6,6,stack,stack
-6,8,stack,drive
+6,6,stack,stack
+6,4,stack,hold
 6,6,stack,stack
 6,6,stack,stack
 6,6,stack,stack
@@ -1276,109 +1276,109 @@ true_label,predicted_label,true_class,predicted_class
 7,7,wheel turn,wheel turn
 7,7,wheel turn,wheel turn
 7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,7,wheel turn,wheel turn
+7,8,wheel turn,drive
 7,8,wheel turn,drive
 7,7,wheel turn,wheel turn
 7,7,wheel turn,wheel turn
 7,7,wheel turn,wheel turn
 7,7,wheel turn,wheel turn
 7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,8,wheel turn,drive
-7,8,wheel turn,drive
-7,8,wheel turn,drive
-7,7,wheel turn,wheel turn
-7,8,wheel turn,drive
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,8,wheel turn,drive
-7,4,wheel turn,hold
-7,7,wheel turn,wheel turn
-7,8,wheel turn,drive
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,8,wheel turn,drive
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,8,wheel turn,drive
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,8,wheel turn,drive
-7,8,wheel turn,drive
-7,8,wheel turn,drive
-7,5,wheel turn,flip
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
-7,7,wheel turn,wheel turn
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
@@ -1648,6 +1648,8 @@ true_label,predicted_label,true_class,predicted_class
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
+8,4,drive,hold
+8,7,drive,wheel turn
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
@@ -1706,6 +1708,7 @@ true_label,predicted_label,true_class,predicted_class
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
+8,4,drive,hold
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
@@ -1807,6 +1810,7 @@ true_label,predicted_label,true_class,predicted_class
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
+8,9,drive,move
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
@@ -1817,10 +1821,6 @@ true_label,predicted_label,true_class,predicted_class
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,0,drive,put down
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
@@ -1899,55 +1899,6 @@ true_label,predicted_label,true_class,predicted_class
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
-8,4,drive,hold
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,4,drive,hold
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,4,drive,hold
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
-8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
@@ -2011,6 +1962,7 @@ true_label,predicted_label,true_class,predicted_class
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
+8,4,drive,hold
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
@@ -2079,7 +2031,6 @@ true_label,predicted_label,true_class,predicted_class
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
-8,0,drive,put down
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
@@ -2097,6 +2048,55 @@ true_label,predicted_label,true_class,predicted_class
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,8,drive,drive
+8,4,drive,hold
 8,8,drive,drive
 8,8,drive,drive
 8,8,drive,drive
@@ -2105,51 +2105,44 @@ true_label,predicted_label,true_class,predicted_class
 8,8,drive,drive
 8,8,drive,drive
 0,8,put down,drive
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,8,put down,drive
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,8,put down,drive
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
 0,0,put down,put down
 0,4,put down,hold
 0,0,put down,put down
 0,0,put down,put down
-0,8,put down,drive
-0,0,put down,put down
-0,0,put down,put down
-0,0,put down,put down
-0,8,put down,drive
-0,0,put down,put down
-0,8,put down,drive
 0,0,put down,put down
 0,0,put down,put down
 0,0,put down,put down
 0,0,put down,put down
-0,8,put down,drive
-0,8,put down,drive
 0,0,put down,put down
-0,8,put down,drive
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,5,put down,flip
+0,0,put down,put down
 0,7,put down,wheel turn
 0,0,put down,put down
 0,0,put down,put down
@@ -2164,6 +2157,13 @@ true_label,predicted_label,true_class,predicted_class
 0,0,put down,put down
 0,0,put down,put down
 0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
+0,0,put down,put down
 0,8,put down,drive
 0,0,put down,put down
 0,0,put down,put down
@@ -2173,21 +2173,21 @@ true_label,predicted_label,true_class,predicted_class
 0,0,put down,put down
 9,9,move,move
 9,8,move,drive
-9,8,move,drive
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,8,move,drive
 9,9,move,move
 9,9,move,move
 9,9,move,move
 9,9,move,move
 9,9,move,move
-9,8,move,drive
 9,9,move,move
-9,8,move,drive
-9,8,move,drive
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
 9,9,move,move
 9,9,move,move
 9,9,move,move
@@ -2228,49 +2228,6 @@ true_label,predicted_label,true_class,predicted_class
 9,9,move,move
 9,9,move,move
 9,9,move,move
-9,8,move,drive
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,8,move,drive
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
 9,9,move,move
 9,9,move,move
 9,9,move,move
@@ -2290,6 +2247,49 @@ true_label,predicted_label,true_class,predicted_class
 9,9,move,move
 9,9,move,move
 9,8,move,drive
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,3,move,turn
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,7,move,wheel turn
 9,9,move,move
 9,9,move,move
 9,9,move,move
@@ -2305,33 +2305,7 @@ true_label,predicted_label,true_class,predicted_class
 9,9,move,move
 9,9,move,move
 9,9,move,move
-9,8,move,drive
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,8,move,drive
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
+9,0,move,put down
 9,9,move,move
 9,9,move,move
 9,9,move,move
@@ -2339,36 +2313,12 @@ true_label,predicted_label,true_class,predicted_class
 9,9,move,move
 9,9,move,move
 9,9,move,move
-9,4,move,hold
 9,9,move,move
 9,9,move,move
 9,9,move,move
 9,9,move,move
 9,9,move,move
-9,8,move,drive
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,8,move,drive
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,4,move,hold
 9,9,move,move
-9,8,move,drive
-9,8,move,drive
-9,9,move,move
-9,9,move,move
-9,8,move,drive
-9,9,move,move
-9,9,move,move
-9,4,move,hold
 9,9,move,move
 9,9,move,move
 9,9,move,move
@@ -2383,16 +2333,9 @@ true_label,predicted_label,true_class,predicted_class
 9,9,move,move
 9,9,move,move
 9,9,move,move
-9,8,move,drive
-9,9,move,move
-9,9,move,move
 9,9,move,move
 9,9,move,move
 9,9,move,move
-9,9,move,move
-9,8,move,drive
-9,8,move,drive
-9,8,move,drive
 9,9,move,move
 9,9,move,move
 9,9,move,move
@@ -2403,7 +2346,6 @@ true_label,predicted_label,true_class,predicted_class
 9,9,move,move
 9,9,move,move
 9,9,move,move
-9,4,move,hold
 9,9,move,move
 9,9,move,move
 9,9,move,move
@@ -2421,6 +2363,7 @@ true_label,predicted_label,true_class,predicted_class
 9,9,move,move
 9,9,move,move
 9,9,move,move
+9,0,move,put down
 9,9,move,move
 9,8,move,drive
 9,9,move,move
@@ -2440,19 +2383,76 @@ true_label,predicted_label,true_class,predicted_class
 9,9,move,move
 9,9,move,move
 9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,9,move,move
-9,8,move,drive
-9,8,move,drive
-9,9,move,move
 9,8,move,drive
 9,9,move,move
 9,9,move,move
 9,9,move,move
 9,9,move,move
 9,9,move,move
+9,0,move,put down
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,9,move,move
+9,8,move,drive
 9,9,move,move
 9,9,move,move
 9,9,move,move
@@ -2497,6 +2497,7 @@ true_label,predicted_label,true_class,predicted_class
 1,1,lift,lift
 1,1,lift,lift
 1,1,lift,lift
+1,6,lift,stack
 1,1,lift,lift
 1,1,lift,lift
 1,1,lift,lift
@@ -2518,7 +2519,6 @@ true_label,predicted_label,true_class,predicted_class
 1,1,lift,lift
 1,1,lift,lift
 1,1,lift,lift
-1,0,lift,put down
 1,1,lift,lift
 1,1,lift,lift
 1,1,lift,lift
@@ -2543,10 +2543,10 @@ true_label,predicted_label,true_class,predicted_class
 2,2,lower,lower
 2,2,lower,lower
 2,2,lower,lower
+2,1,lower,lift
+2,1,lower,lift
 2,2,lower,lower
-2,2,lower,lower
-2,2,lower,lower
-2,2,lower,lower
+2,5,lower,flip
 3,3,turn,turn
 3,3,turn,turn
 3,3,turn,turn
@@ -2576,7 +2576,6 @@ true_label,predicted_label,true_class,predicted_class
 3,3,turn,turn
 3,3,turn,turn
 3,3,turn,turn
-3,7,turn,wheel turn
 3,3,turn,turn
 3,3,turn,turn
 3,3,turn,turn
@@ -2593,5 +2592,6 @@ true_label,predicted_label,true_class,predicted_class
 3,3,turn,turn
 3,3,turn,turn
 3,3,turn,turn
-3,6,turn,stack
+3,3,turn,turn
+3,0,turn,put down
 3,3,turn,turn
