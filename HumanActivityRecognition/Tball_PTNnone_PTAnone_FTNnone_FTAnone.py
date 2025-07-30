@@ -23,6 +23,7 @@ logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 from utils.log_config import logger
 from figures import plot_CM, combine_kfold_confusion_matrices
 from utils import mapping_activity
+from HumanActivityRecognition.results_analysis import *
 
 import normalization
 from sklearn.model_selection import StratifiedKFold
@@ -448,8 +449,18 @@ logger.info(f"F1 score finale: {final_f1_score:.4f}")
 
 
 
-#AGGREGAZIONE DELLE CM DI TEST
+# Per ball
+# Per ball - VERSIONE AUTOMATICA
+cm_combined, y_true, y_pred = combine_kfold_confusion_matrices(
+    fold_results_dir=REPORTS_DIR,
+    num_folds=3,
+    toy_name="ball",
+    save_path="combined_cm_ball_3fold_Tball_PTNnone_PTAnone_FTNnone_FTAnone.png",
+    class_names=class_names
+    # script_suffix viene dedotto automaticamente dal nome del file
+)
 
+#AGGREGAZIONE DELLE CM DI TEST
 cm_combined, y_true, y_pred = combine_kfold_confusion_matrices(
     fold_results_dir=REPORTS_DIR,
     num_folds=3,
@@ -457,3 +468,51 @@ cm_combined, y_true, y_pred = combine_kfold_confusion_matrices(
     save_path="combined_cm_ball_3fold_Tball_PTNnone_PTAnone_FTNnone_FTAnone.png",
     class_names=class_names
 )
+
+"""# === ANALISI APPROFONDITA DEGLI ERRORI ===
+logger.info("=== INIZIO ANALISI APPROFONDITA DEGLI ERRORI ===")
+
+# 1. Analisi temporale degli errori
+temporal_results = analyze_temporal_error_distribution(
+    y_true=y_true,
+    y_pred=y_pred
+)
+
+plot_temporal_error_distribution(
+    results=temporal_results,
+    class_names=class_names,
+    save_path=os.path.join(FIGURES_DIR, "temporal_error_analysis_ball.png")
+)
+
+# 2. Analisi errori con padding
+# Per questo hai bisogno dei dati X originali dai fold
+# Se non li hai salvati, puoi ricostruirli o usare i dati completi come approssimazione
+padding_results = analyze_padding_errors(
+    y_true=y_true,
+    y_pred=y_pred,
+    X_data=X,  # Usa i dati completi come approssimazione
+    padding_threshold=0.01,  # Regola in base ai tuoi dati
+    save_path=os.path.join(FIGURES_DIR, "padding_error_analysis_ball.png")
+)
+
+# 3. Analisi errori per soggetto
+# Per questo hai bisogno degli ID dei soggetti per ogni finestra
+# Se li hai salvati durante il k-fold, caricali, altrimenti usa una stima
+if 'kid_action_counts' in locals():
+    # Ricostruisci gli ID dei soggetti (se possibile)
+    logger.info("Ricostruzione degli ID soggetti in corso...")
+    # Questo è un esempio - adatta in base ai tuoi dati
+    subject_ids = np.random.randint(3000, 3025, len(y_true))  # Placeholder
+    
+    subject_results, worst_subjects, best_subjects = analyze_subject_errors(
+        y_true=y_true,
+        y_pred=y_pred,
+        subject_ids=subject_ids,
+        class_names=class_names,
+        save_path=os.path.join(FIGURES_DIR, "subject_error_analysis_ball.png")
+    )
+    
+    logger.info(f"Soggetti più problematici: {worst_subjects}")
+    logger.info(f"Soggetti con migliori performance: {best_subjects}")
+
+logger.info("=== ANALISI ERRORI COMPLETATA ===")"""

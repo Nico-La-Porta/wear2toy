@@ -1,0 +1,2 @@
+accuracy,total_predictions,num_folds,toy_name,script_suffix
+0.4230769230769231,26,3,ball,Tball_PTNnone_PTAalltrs_FTNnone_FTAnone

@@ -29,7 +29,7 @@ from models.DeepConvLSTM import DeepConvLSTM, HARDataset
 
 
 def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
-: np.ndarray, batch_size: int, figure_name: str, labels_dict: dict = None):
+: np.ndarray, batch_size: int, figure_name: str, labels_dict: dict = None, figures_dir=FIGURES_DIR, reports_dir=REPORTS_DIR):
     """
     Mostra e salva la matrice di confusione per il modello e il dataset forniti.
     Inoltre salva le predizioni e le etichette reali in un file CSV.
@@ -103,8 +103,8 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
         f1_per_class = f1_score(all_labels, all_preds, average=None)
  
         # Salvataggio delle predizioni in un file CSV
-        os.makedirs(REPORTS_DIR, exist_ok=True)  # Assicura che la directory per i risultati esista
-        predictions_file = os.path.join(REPORTS_DIR, f"{figure_name}_predictions.csv")
+        os.makedirs(reports_dir, exist_ok=True)  # Assicura che la directory per i risultati esista
+        predictions_file = os.path.join(reports_dir, f"{figure_name}_predictions.csv")
        
         # Creo un DataFrame con le etichette vere e le predizioni
         predictions_df = pd.DataFrame({
@@ -124,7 +124,7 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
         # Salvo l'F1-score in un file TXT
         # Rimuovo le prime due lettere dal nome della figura
         f1_filename = figure_name[2:] if len(figure_name) > 2 else figure_name
-        f1_file_txt = os.path.join(REPORTS_DIR, f"f1-score_{f1_filename}.txt")
+        f1_file_txt = os.path.join(reports_dir, f"f1-score_{f1_filename}.txt")
  
         with open(f1_file_txt, 'w') as f:
             f.write(f"F1-Score (Macro): {f1_scores['macro']:.6f}\n")
@@ -149,7 +149,7 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
             labels_names = [str(i) for i in range(len(cm))]
  
         # Verifico che la directory di output esista
-        os.makedirs(FIGURES_DIR, exist_ok=True)
+        os.makedirs(figures_dir, exist_ok=True)
  
         # Plot
         plt.figure(figsize=(16, 14), dpi=300)
@@ -165,7 +165,7 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
         plt.tight_layout()  
  
         # Salvataggio
-        plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}.png"),
+        plt.savefig(os.path.join(figures_dir, f"{figure_name}.png"),
                     bbox_inches='tight', dpi=300)  # Salvataggio in alta qualità
         plt.close()
         logger.info(f"Confusion Matrix saved")
@@ -182,42 +182,135 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
 
 
 
-def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ball", save_path=None, class_names=None):
+def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ball", save_path=None, class_names=None, script_suffix=None, figures_dir=FIGURES_DIR):
     """
     Combina le confusion matrix di tutti i fold in una singola CM finale
-    
-    Args:
-        fold_results_dir: Directory contenente i CSV delle predizioni per ogni fold
-        num_folds: Numero di fold utilizzati
-        toy_name: Nome del giocattolo (es. "ball", "car", etc.)
-        save_path: Path dove salvare la CM combinata
     """
+    
+    # Se script_suffix non è fornito, deducilo automaticamente
+    if script_suffix is None:
+        import inspect
+        import os
+        
+        # Ottieni il frame del chiamante (lo script che chiama questa funzione)
+        caller_frame = inspect.currentframe().f_back
+        caller_filename = caller_frame.f_globals.get('__file__', '')
+        
+        if caller_filename:
+            # Estrai il nome del file senza path e senza estensione
+            script_name = os.path.splitext(os.path.basename(caller_filename))[0]
+            script_suffix = script_name
+            print(f"Script suffix dedotto automaticamente: {script_suffix}")
+        else:
+            script_suffix = f"T{toy_name}_PTN*_PTA*_FTN*_FTA*"
+            print(f"Usando pattern wildcard: {script_suffix}")
     
     all_true_labels = []
     all_predicted_labels = []
     
+    # Pattern aggiornati per trovare i file - senza il toy_name nel mezzo
+    search_patterns = [
+        f"test_predictions__test_fold_{{}}_kfold_inference_{num_folds}_folds_{script_suffix}.csv",
+        # Pattern originale senza "test_"
+        f"predictions__test_fold_{{}}_kfold_inference_{num_folds}_folds_{script_suffix}.csv",
+        # Pattern con wildcard
+        f"test_predictions__test_fold_{{}}_kfold_inference_{num_folds}_folds_T{toy_name}*.csv",
+        f"predictions__test_fold_{{}}_kfold_inference_{num_folds}_folds_T{toy_name}*.csv",
+        # Pattern originali per compatibilità
+        f"test_predictions__test_fold_{{}}_kfold_inference_{toy_name}_{num_folds}_folds_{script_suffix}.csv",
+        f"predictions__test_fold_{{}}_kfold_inference_{toy_name}_{num_folds}_folds_{script_suffix}.csv",
+    ]
+    
+    print(f"Cercando file per script: {script_suffix}")
+    
     # Leggo i risultati di ogni fold
     for fold in range(1, num_folds + 1):
-        # Pattern flessibile per i nomi dei file CSV
-        predictions_file = os.path.join(fold_results_dir, f"predictions__test_fold_{fold}_kfold_inference_{toy_name}_{num_folds}_folds.csv")
+        file_found = False
         
-        if os.path.exists(predictions_file):
-            df_fold = pd.read_csv(predictions_file)
+        for pattern in search_patterns:
+            if '*' in pattern.format(fold):
+                # Usa glob per pattern con wildcard
+                import glob
+                full_pattern = os.path.join(fold_results_dir, pattern.format(fold))
+                matching_files = glob.glob(full_pattern)
+                
+                # Filtra per trovare il file più specifico che corrisponde al nostro script
+                if script_suffix and script_suffix != f"T{toy_name}_PTN*_PTA*_FTN*_FTA*":
+                    # Cerca file che contengono parti del script suffix
+                    best_match = None
+                    max_score = 0
+                    for file_path in matching_files:
+                        filename = os.path.basename(file_path)
+                        # Calcola score di similarità
+                        score = sum(1 for part in script_suffix.split('_') if part in filename)
+                        if score > max_score:
+                            max_score = score
+                            best_match = file_path
+                    
+                    if best_match:
+                        matching_files = [best_match]
+                
+                if matching_files:
+                    predictions_file = matching_files[0]
+                else:
+                    continue
+            else:
+                # Path diretto senza wildcard
+                predictions_file = os.path.join(fold_results_dir, pattern.format(fold))
+                if not os.path.exists(predictions_file):
+                    continue
             
-            #colonne sono true e predicted
-            true_col = 'true' if 'true' in df_fold.columns else df_fold.columns[0]
-            pred_col = 'predicted' if 'predicted' in df_fold.columns else df_fold.columns[1]
+            # Se arriviamo qui, abbiamo trovato un file
+            print(f"File trovato per fold {fold}: {os.path.basename(predictions_file)}")
             
-            all_true_labels.extend(df_fold[true_col].tolist())
-            all_predicted_labels.extend(df_fold[pred_col].tolist())
-            
-            print(f"Fold {fold}: {len(df_fold)} predizioni caricate")
-        else:
-            print(f"WARNING: File {predictions_file} non trovato")
+            try:
+                df_fold = pd.read_csv(predictions_file)
+                
+                # Determina le colonne corrette
+                if 'true_label' in df_fold.columns and 'predicted_label' in df_fold.columns:
+                    true_col = 'true_label'
+                    pred_col = 'predicted_label'
+                elif 'y_true' in df_fold.columns and 'y_pred' in df_fold.columns:
+                    true_col = 'y_true'
+                    pred_col = 'y_pred'
+                elif 'true' in df_fold.columns and 'predicted' in df_fold.columns:
+                    true_col = 'true'
+                    pred_col = 'predicted'
+                else:
+                    # Usa le prime due colonne
+                    true_col = df_fold.columns[0]
+                    pred_col = df_fold.columns[1]
+                
+                all_true_labels.extend(df_fold[true_col].tolist())
+                all_predicted_labels.extend(df_fold[pred_col].tolist())
+                
+                print(f"Fold {fold}: {len(df_fold)} predizioni caricate")
+                file_found = True
+                break
+                
+            except Exception as e:
+                print(f"Errore nel leggere {predictions_file}: {e}")
+                continue
+        
+        if not file_found:
+            print(f"WARNING: Nessun file trovato per fold {fold}")
+            # Debug: mostra i file disponibili per questo fold
+            import glob
+            debug_pattern = os.path.join(fold_results_dir, f"*fold_{fold}*{toy_name}*.csv")
+            debug_files = glob.glob(debug_pattern)
+            if debug_files:
+                print(f"  File disponibili per fold {fold}:")
+                for f in debug_files:
+                    print(f"    - {os.path.basename(f)}")
     
     # Controllo se sono stati caricati dati
     if len(all_true_labels) == 0:
-        print("ERROR: Nessun dato caricato. Verifica i nomi dei file CSV.")
+        print("ERROR: Nessun dato caricato. File disponibili nella directory:")
+        import glob
+        csv_files = glob.glob(os.path.join(fold_results_dir, "*predictions*.csv"))
+        for csv_file in csv_files:
+            if toy_name in csv_file:
+                print(f"  - {os.path.basename(csv_file)}")
         return None, None, None
     
     # Converto in array numpy
@@ -231,7 +324,7 @@ def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ba
     # Creo la confusion matrix combinata
     cm_combined = confusion_matrix(all_true_labels, all_predicted_labels)
     
-    # Ottiengo  classi
+    # Ottengo le classi
     classes = np.unique(np.concatenate([all_true_labels, all_predicted_labels]))
     
     if class_names:
@@ -243,20 +336,28 @@ def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ba
     sns.heatmap(cm_combined, annot=True, fmt='d', cmap='Greys', 
                 xticklabels=tick_labels, yticklabels=tick_labels,
                 cbar_kws={'label': 'Count'})
-    plt.title(f'Combined Confusion Matrix - {num_folds} Fold CV ({toy_name.upper()})')
+    
+    # Titolo più descrittivo
+    title = f'Combined Confusion Matrix - {num_folds} Fold CV ({toy_name.upper()})'
+    if script_suffix and script_suffix != f"T{toy_name}_PTN*_PTA*_FTN*_FTA*":
+        title += f'\n{script_suffix}'
+    
+    plt.title(title)
     plt.xlabel('Predicted')
     plt.ylabel('True')
     plt.xticks(rotation=45, ha='right')
     plt.yticks(rotation=0)
 
-
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Confusion matrix salvata in: {save_path}")
+        # Assicurati che la directory esista
+        os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else figures_dir, exist_ok=True)
+        full_save_path = save_path if os.path.dirname(save_path) else os.path.join(figures_dir, save_path)
+        plt.savefig(full_save_path, dpi=300, bbox_inches='tight')
+        print(f"Confusion matrix salvata in: {full_save_path}")
     
     plt.show()
     
-    # Calcooa metriche
+    # Calcolo metriche
     accuracy = np.trace(cm_combined) / np.sum(cm_combined)
     
     # Report di classificazione
@@ -266,6 +367,7 @@ def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ba
     print("\n" + "="*50)
     print("CONFUSION MATRIX COMBINATA")
     print("="*50)
+    print(f"Script: {script_suffix}")
     print(f"Accuracy: {accuracy:.4f}")
     print(f"\nConfusion Matrix:\n{cm_combined}")
     print(f"\nClassification Report:\n{report}")
@@ -274,7 +376,7 @@ def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ba
     if save_path:
         base_path = os.path.splitext(save_path)[0]
         
-        # Saloa la confusion matrix come CSV
+        # Salvo la confusion matrix come CSV
         cm_df = pd.DataFrame(cm_combined, 
                            index=[f'True_{i}' for i in classes],
                            columns=[f'Pred_{i}' for i in classes])
@@ -292,7 +394,8 @@ def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ba
             'accuracy': accuracy,
             'total_predictions': len(all_true_labels),
             'num_folds': num_folds,
-            'toy_name': toy_name
+            'toy_name': toy_name,
+            'script_suffix': script_suffix
         }
         metrics_df = pd.DataFrame([metrics])
         metrics_df.to_csv(f"{base_path}_metrics.csv", index=False)
@@ -300,9 +403,6 @@ def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ba
         print(f"File salvati con prefisso: {base_path}")
     
     return cm_combined, all_true_labels, all_predicted_labels
-
-
-
 # Configurazione dei parametri di stile per i grafici
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Times New Roman', 'DejaVu Serif']

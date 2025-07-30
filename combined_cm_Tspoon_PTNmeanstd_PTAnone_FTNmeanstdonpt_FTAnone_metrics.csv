@@ -1,0 +1,2 @@
+accuracy,total_predictions,num_folds,toy_name,script_suffix
+0.5416666666666666,24,3,spoon,Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonpt_FTAnone

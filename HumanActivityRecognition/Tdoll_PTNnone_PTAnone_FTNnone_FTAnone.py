@@ -129,8 +129,6 @@ filtered_counts = df_doll_filtered['action_id'].value_counts().sort_index()
 for action_id, count in filtered_counts.items():
     logger.info(f"   Action {action_id}: {count} righe")
 
-
-
 #MI VADO A TENERE DA PARTE IL KID PER IL TEST
 KID_TEST = 3023
 
@@ -200,6 +198,10 @@ for action_file in [f for f in os.listdir(path_1) if f.endswith('.csv') and f.sp
 X = np.concatenate(X, axis=0)
 Y = np.concatenate(Y, axis=0)
 
+# Tranform kid_action_count in a pandas DataFrame
+kid_action_counts_df = pd.DataFrame.from_dict(kid_action_counts).fillna(0).astype(int)
+# Sort the column in alphabetical order
+kid_action_counts_df = kid_action_counts_df.reindex(sorted(kid_action_counts_df.columns), axis=1)
 
 # Stampo le dimensioni di X e Y
 logger.info(f"Dimensioni di X finale: {X.shape}")

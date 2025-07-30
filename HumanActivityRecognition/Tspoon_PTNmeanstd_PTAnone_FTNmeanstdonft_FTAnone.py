@@ -35,7 +35,9 @@ path="C:\codes\HumanActivityRecognition\data\downstream_data"
 logger.debug(path)
 
 
-
+#CREO SOTTOCARTELLA NELLA CARTELLA FIGURES_DIR CHE SI CHIAMA spoon_figures_lp
+figures_spoon_path = os.path.join(FIGURES_DIR, 'spoon_figures_LP')
+os.makedirs(figures_spoon_path, exist_ok=True) 
 
 #Visto che l'informazione relativa all'id del bambino lo abbiamo, così come abbiamo anche l'informazione relativa
 #al giocattolo, vado a filtrare i .csv in modo tale da avere solo le righe che hanno l'attività non nulla e poi
@@ -252,7 +254,7 @@ fold_results = {
 }
 
 # Percorsi per i modelli
-BEST_MODEL_KFOLD_DIR = os.path.join(MODELS_DIR, "kfold_spoon_models_3_folds")
+BEST_MODEL_KFOLD_DIR = os.path.join(MODELS_DIR, "kfold_spoon_models_3_folds_LP")
 os.makedirs(BEST_MODEL_KFOLD_DIR, exist_ok=True)
 
 
@@ -307,14 +309,26 @@ for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y)):
             strict=False
         )
         
-        # Sostituisco la testa
+        """Sostituisco la testa
         num_ftrs = model.classification_head.in_features
         model.classification_head = nn.Linear(num_ftrs, 3)
         model.set_n_classes(3)
 
         for param in model.parameters():
-            param.requires_grad = True
+            param.requires_grad = True"""
         
+
+            # Sostituisco la testa
+        num_ftrs = model.classification_head.in_features
+        model.classification_head = nn.Linear(num_ftrs, 3)
+        model.set_n_classes(3)
+
+        # FREEZO TUTTI I PARAMETRI ECCETTO LA TESTA (LINEAR PROBING)
+        for name, param in model.named_parameters():
+            if 'classification_head' not in name:
+                param.requires_grad = False
+            else:
+                param.requires_grad = True
         # Training
         best_f1_score = train_with_cm.train(model, train_loader, val_loader, 
                                            epochs=100, batch_size=batch_size, lr=lr)
@@ -348,13 +362,25 @@ for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y)):
         strict=False
     )
 
-    # Sostituisco la testa
+    """Sostituisco la testa
     num_ftrs = model_final_fold.classification_head.in_features
     model_final_fold.classification_head = nn.Linear(num_ftrs, 3)
     model_final_fold.set_n_classes(3)
 
     for param in model_final_fold.parameters():
-        param.requires_grad = True
+        param.requires_grad = True"""
+    
+        # Sostituisco la testa
+    num_ftrs = model_final_fold.classification_head.in_features
+    model_final_fold.classification_head = nn.Linear(num_ftrs, 3)
+    model_final_fold.set_n_classes(3)
+
+    # FREEZO TUTTI I PARAMETRI ECCETTO LA TESTA (LINEAR PROBING)
+    for name, param in model_final_fold.named_parameters():
+        if 'classification_head' not in name:
+            param.requires_grad = False
+        else:
+            param.requires_grad = True
 
     # Training finale per questo fold
     train_loader_final = DataLoader(train_dataset_fold, batch_size=best_batch_size, shuffle=True, drop_last=True)
@@ -373,7 +399,9 @@ for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y)):
         save_confusion_matrix=True, 
         save_predictions_csv=True,
         save_f1_score=True,
-        labels_dict=labels_dict
+        labels_dict=labels_dict,
+        figures_dir=figures_spoon_path,
+        reports_dir=figures_spoon_path
     )
 
     # Salvo il modello di questo fold
@@ -421,7 +449,7 @@ logger.info(f"F1 score test: {best_fold_result['test_f1']:.4f}")
 
 # Salvo i risultati di tutti i fold
 results_df = pd.DataFrame(fold_results)
-results_df.to_csv(os.path.join(REPORTS_DIR, 'kfold_results_inference_spoon_Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone.csv'), index=False)
+results_df.to_csv(os.path.join(figures_spoon_path, 'kfold_results_inference_spoon_Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone.csv'), index=False)
 
 # Salvo i migliori iperparametri
 best_hyperparameters = best_fold_result['params']
@@ -431,7 +459,7 @@ best_hyperparameters['best_fold'] = best_fold_result['fold']
 
 best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
 best_hyperparameters_df.to_csv(
-    os.path.join(REPORTS_DIR, 'best_hyperparameters_kfold_inference_spoon_Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone.csv'), 
+    os.path.join(figures_spoon_path, 'best_hyperparameters_kfold_inference_spoon_Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone.csv'), 
     index=False
 )
 
@@ -467,13 +495,25 @@ model_final.load_state_dict(
     strict=False
 )
 
-# Sostituisco la testa
+"""Sostituisco la testa
 num_ftrs = model_final.classification_head.in_features
 model_final.classification_head = nn.Linear(num_ftrs, 3)
 model_final.set_n_classes(3)
 
 for param in model_final.parameters():
-    param.requires_grad = True
+    param.requires_grad = True"""
+
+# Sostituisco la testa
+num_ftrs = model_final.classification_head.in_features
+model_final.classification_head = nn.Linear(num_ftrs, 3)
+model_final.set_n_classes(3)
+
+# FREEZO TUTTI I PARAMETRI ECCETTO LA TESTA (LINEAR PROBING)
+for name, param in model_final.named_parameters():
+    if 'classification_head' not in name:
+        param.requires_grad = False
+    else:
+        param.requires_grad = True
 
 # Training finale
 # Training finale
@@ -484,7 +524,7 @@ final_f1_score = train_with_cm.train(
 )
 
 # Salvo il modello finale
-FINAL_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_kfold_final_inference_spoon_Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone.pkl")
+FINAL_MODEL_PATH = os.path.join(BEST_MODEL_KFOLD_DIR, "best_model_kfold_final_inference_spoon_Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone.pkl")
 torch.save(model_final.state_dict(), FINAL_MODEL_PATH)
 
 logger.info(f"Modello finale salvato: {FINAL_MODEL_PATH}")
@@ -500,6 +540,8 @@ plot_CM(
     Y=Y,
     batch_size=best_batch_size_final,
     figure_name="cm_final_kfold_inference_spoon_all_data_Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone",
+    figures_dir=figures_spoon_path,
+    reports_dir=figures_spoon_path,
 )
 
 logger.info("=== PROCEDURA K-FOLD COMPLETATA ===")
@@ -514,9 +556,11 @@ logger.info(f"F1 score finale: {final_f1_score:.4f}")
 #AGGREGAZIONE DELLE CM DI TEST
 
 cm_combined, y_true, y_pred = combine_kfold_confusion_matrices(
-    fold_results_dir=REPORTS_DIR,
+    fold_results_dir=figures_spoon_path,
     num_folds=3,
     toy_name="spoon",
     save_path="combined_cm_Tspoon_PTNmeanstd_PTAnone_FTNmeanstdonft_FTAnone.png",
     class_names=class_names,
+    figures_dir=figures_spoon_path,
+    reports_dir=figures_spoon_path
 )

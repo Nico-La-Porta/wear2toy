@@ -133,3 +133,73 @@ class FocalLoss(nn.Module):
         elif self.reduction == 'sum':
             return loss.sum()
         return loss
+
+
+#combina due perdite con peso epsilon dove x  è perdita da etichette smussate mentre y è la perdita della classica cross entropy
+def linear_combination(x, y, epsilon):
+    return epsilon * x + (1 - epsilon) * y
+
+#PER definire come combinare le perdite
+def reduce_loss(loss, reduction='mean'):
+    return loss.mean() if reduction == 'mean' else loss.sum() if reduction == 'sum' else loss
+
+
+class LabelSmoothingCrossEntropy(nn.Module):
+    def __init__(self, epsilon: float = 0.1, reduction='mean'):
+        super().__init__()
+        self.epsilon = epsilon
+        self.reduction = reduction
+
+    def forward(self, preds, target):
+        n = preds.size()[-1] #numero di classi
+        log_preds = F.log_softmax(preds, dim=-1)  # trasformazione in log-probabilità Serve per avere le probabilità logaritmiche necessarie per la CE
+        loss = reduce_loss(-log_preds.sum(dim=-1), self.reduction) #somma le log-prob di tutte le classi per ogni esempio, col - trasformo in perdita, e con reduce_loss applico la riduzione scelta
+        nll = F.nll_loss(log_preds, target, reduction=self.reduction) 
+        return linear_combination(loss / n, nll, self.epsilon)
+
+
+class WeightedCrossEntropyLoss(nn.Module):
+    def __init__(self, class_weights):
+        """
+        Weighted Cross Entropy Loss con pesi personalizzati
+        
+        Args:
+            class_weights: tensor con pesi per ogni classe
+        """
+        super(WeightedCrossEntropyLoss, self).__init__()
+        self.class_weights = class_weights
+    
+    def forward(self, inputs, targets):
+        return F.cross_entropy(inputs, targets, weight=self.class_weights)
+
+
+class CombinedLoss(nn.Module):
+    def __init__(self, focal_weight=0.7, ce_weight=0.3, gamma=2.0, class_weights=None, num_classes=None):
+        """
+        Combinazione di Focal Loss e Weighted Cross Entropy
+        
+        Args:
+            focal_weight: peso per la focal loss
+            ce_weight: peso per la cross entropy
+            gamma: parametro gamma per focal loss
+            class_weights: pesi delle classi
+            num_classes: numero di classi
+        """
+        super(CombinedLoss, self).__init__()
+        self.focal_weight = focal_weight
+        self.ce_weight = ce_weight
+        
+        #CREO LE DUE LOSS FUNCTION PER LA COMBINAZIONE
+        self.focal_loss = FocalLoss(
+            gamma=gamma, 
+            alpha=class_weights, 
+            task_type='multi-class', 
+            num_classes=num_classes
+        )
+        self.ce_loss = WeightedCrossEntropyLoss(class_weights)
+    
+    def forward(self, inputs, targets):
+        focal = self.focal_loss(inputs, targets) # calcolo la focal loss
+        ce = self.ce_loss(inputs, targets) # calcolo la cross entropy weighted
+        return self.focal_weight * focal + self.ce_weight * ce #combino le due perdite con i pesi specificati
+    

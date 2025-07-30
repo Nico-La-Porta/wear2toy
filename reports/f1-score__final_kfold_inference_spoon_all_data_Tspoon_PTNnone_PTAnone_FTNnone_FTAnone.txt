@@ -1,0 +1,8 @@
+F1-Score (Macro): 0.261808
+F1-Score (Micro): 0.481481
+F1-Score (Weighted): 0.349078
+
+F1-Score per classe:
+hold: 0.631579
+throw: 0.000000
+move: 0.153846

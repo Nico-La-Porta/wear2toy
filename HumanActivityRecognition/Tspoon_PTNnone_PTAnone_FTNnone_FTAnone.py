@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 import glob
 from collections import defaultdict
 
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset 
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn
 import optuna
 import optuna.visualization as vis
 import train
@@ -32,6 +32,10 @@ from utils import mapping_activity
 
 path="C:\codes\HumanActivityRecognition\data\downstream_data"
 logger.debug(path)
+
+#CREO SOTTOCARTELLA NELLA CARTELLA FIGURES_DIR CHE SI CHIAMA spoon_figures_lp
+figures_spoon_path = os.path.join(FIGURES_DIR, 'spoon_figures_LP')
+os.makedirs(figures_spoon_path, exist_ok=True)  # Crea la cartella
 
 
 
@@ -153,17 +157,33 @@ sliding_window_step = 50
 
 X, Y = [], []
 kid_action_counts = {}
+all_consecutivity = []
+all_window_indices = []
+global_window_id = 0
 
 for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.startswith('df_spoon_action_') and not f.endswith('normalized_pt.csv')]:
     file_path = os.path.join(path, action_file)
     action = action_file.split('_')[-1].split('.')[0]
 
-    X_windows, Y_windows, kid_id_action_dict = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
+    X_windows, Y_windows, kid_id_action_dict, is_consecutive = sliding_window_on_data.process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step)
 
+    
+    for i in range(len(X_windows)):
+        all_window_indices.append({
+            'global_window_id': global_window_id,
+            'action_id': action,
+            #'local_window_id': i,
+            #'file': action_file
+        })
+        global_window_id += 1
+    
     X.append(X_windows)
     Y.append(Y_windows)
+    all_consecutivity.extend(is_consecutive)
 
-
+    logger.info(f"Numero totale di finestre per l'azione {action}: {len(X_windows)}")
+    logger.info(f"Finestre consecutive per l'azione {action}: {sum(is_consecutive)}")
+    logger.info(f"Finestre non consecutive per l'azione {action}: {len(is_consecutive) - sum(is_consecutive)}")
     logger.info(f"Numero  totale di finestre per l'azione {action}:{len(X_windows)}")
     kid_action_counts[f"spoon_action_{action}"] = kid_id_action_dict #aggiungo il dizionario al dizionario principale per tenere traccia del numero di finestre per ogni bambino per ogni azione, ogni spoon_action è una chiave e il valore è un dizionario con il numero di finestre per ogni bambino
     logger.info(f"Contenuto finale di kid_action_counts: {kid_action_counts}") #per veere quante finestre per ogni azione e per ogni bambino sono state elaborte 
@@ -172,6 +192,21 @@ for action_file in [f for f in os.listdir(path) if f.endswith('.csv') and f.star
 # Concateno tutti i dati in un unico array per X e Y
 X = np.concatenate(X, axis=0)
 Y = np.concatenate(Y, axis=0)
+all_consecutivity = np.array(all_consecutivity)
+
+
+
+
+
+
+logger.info(f"Dimensioni di X dopo aggiunta indici finestre: {X.shape}")
+
+logger.info(f"Dimensioni di X dopo concatenazione: {X.shape}")
+
+consecutivity_expanded = all_consecutivity.reshape(-1, 1, 1)  # (n_windows, 1, 1)
+consecutivity_repeated = np.repeat(consecutivity_expanded, X.shape[1], axis=1)  # (n_windows, window_length, 1)
+# Ora puoi aggiungere le informazioni di consecutività come feature aggiuntiva
+X_with_consecutivity = np.concatenate([X, consecutivity_repeated], axis=2)  # (n_windows, window_length, n_features+1)
 
 
 # Stampo le dimensioni di X e Y
@@ -181,7 +216,10 @@ logger.info(f"Tipo di Y: {Y.dtype}")
 logger.info(f"Shape di Y: {Y.shape}")
 logger.info(f"Primi 5 elementi di Y: {Y[:5]}")
 logger.info(f"Tipo del primo elemento: {type(Y[0])}")
-
+# Log delle statistiche
+logger.info(f"Finestre totali: {len(all_consecutivity)}")
+logger.info(f"Finestre consecutive: {sum(all_consecutivity)} ({sum(all_consecutivity)/len(all_consecutivity)*100:.1f}%)")
+logger.info(f"Finestre non consecutive: {len(all_consecutivity) - sum(all_consecutivity)} ({(len(all_consecutivity) - sum(all_consecutivity))/len(all_consecutivity)*100:.1f}%)")
 
 if Y.ndim > 1:
     logger.info(f"Y ha {Y.ndim} dimensioni ({Y.shape}), lo appiattisco...")
@@ -219,13 +257,48 @@ class_names = [spoon_mapping["encoded_to_name"][i] for i in range(3)]
 print(f"Class names: {class_names}")
 
 
+logger.info(f"\n=== DEBUG DATASET ===")
+logger.info(f"Numero totale finestre: {len(X)}")
+logger.info(f"Shape di X: {X.shape}")
+logger.info(f"Shape di Y: {Y.shape}")
+logger.info(f"Distribuzione classi: {np.bincount(Y)}")
 
+# Commenta fino alla fine del codice
 # Parametri per K-Fold
 K_FOLDS = 3
 random_state = 42
 
+# PRIMA del K-Fold (riga ~270), aggiungi:
+logger.info(f"\n=== DEBUG INDICI PRIMA DEL K-FOLD ===")
+logger.info(f"Lunghezza all_window_indices: {len(all_window_indices)}")
+
+# Controlla duplicati nei global_window_id
+global_ids = [w['global_window_id'] for w in all_window_indices]
+unique_global_ids = set(global_ids)
+logger.info(f"Global IDs totali: {len(global_ids)}")
+logger.info(f"Global IDs unici: {len(unique_global_ids)}")
+
+if len(global_ids) != len(unique_global_ids):
+    logger.error("DUPLICATI trovati in all_window_indices!")
+    duplicates = [id for id in global_ids if global_ids.count(id) > 1]
+    logger.error(f"IDs duplicati: {set(duplicates)}")
+    
+    # Trova dove sono i duplicati
+    for dup_id in set(duplicates):
+        positions = [i for i, w in enumerate(all_window_indices) if w['global_window_id'] == dup_id]
+        logger.error(f"Global ID {dup_id} trovato alle posizioni: {positions}")
+        logger.error(f"  Posizione {positions[0]}: {all_window_indices[positions[0]]}")
+        logger.error(f"  Posizione {positions[1]}: {all_window_indices[positions[1]]}")
+else:
+    logger.info("Nessun duplicato in all_window_indices")
+
+logger.info(f"Primi 10 global_ids: {global_ids[:10]}")
+logger.info(f"Ultimi 10 global_ids: {global_ids[-10:]}")
+
 # Creo il StratifiedKFold
 skf = StratifiedKFold(n_splits=K_FOLDS, shuffle=True, random_state=random_state)
+
+#CONTROLLA I FOLD E GLI INDICI (14 train e 4 per val), 
 
 # Dizionario per salvare i risultati di ogni fold
 fold_results = {
@@ -236,7 +309,7 @@ fold_results = {
 }
 
 # Percorsi per i modelli
-BEST_MODEL_KFOLD_DIR = os.path.join(MODELS_DIR, "kfold_spoon_models_3_folds")
+BEST_MODEL_KFOLD_DIR = os.path.join(MODELS_DIR, "kfold_spoon_models_3_folds_LP")
 os.makedirs(BEST_MODEL_KFOLD_DIR, exist_ok=True)
 
 
@@ -250,26 +323,71 @@ all_fold_scores = []
 
 for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y)):
     logger.info(f"\n=== FOLD {fold + 1}/{K_FOLDS} ===")
+    logger.info(f"\n=== FOLD {fold + 1} SPLIT DEBUG ===")
+    logger.info(f"Train+Val indices: {len(train_val_idx)} finestre")
+    logger.info(f"Test indices: {len(test_idx)} finestre")
+    logger.info(f"Test indices: {test_idx}")
+
+    logger.info(f"Train+Val indices (first 10): {train_val_idx[:10]}")
+    logger.info(f"Test indices: {test_idx}")
+    
+    # Verifica che non ci siano sovrapposizioni
+    overlap = set(train_val_idx).intersection(set(test_idx))
+    if overlap:
+        logger.error(f"SOVRAPPOSIZIONE trovata: {overlap}")
+    else:
+        logger.info("Nessuna sovrapposizione train-test")
+    
+    # Verifica gli indici delle finestre corrispondenti
+    test_window_ids = [all_window_indices[i] for i in test_idx]
+    train_val_window_ids = [all_window_indices[i] for i in train_val_idx]
+    
+    logger.info(f"Test window global_ids: {[w['global_window_id'] for w in test_window_ids]}")
+    logger.info(f"Train+Val window global_ids (first 10): {[w['global_window_id'] for w in train_val_window_ids[:10]]}")
     
     # Split dei dati per questo fold
     X_train_val, X_test_fold = X[train_val_idx], X[test_idx]
     Y_train_val, Y_test_fold = Y[train_val_idx], Y[test_idx]
+
+    
+    
+   # GESTIONE CORRETTA DEGLI INDICI
+    train_val_indices = [all_window_indices[i] for i in train_val_idx] # estraggo per ogni indice nel set di train_val gli indici della finestra originale 
+    test_fold_indices = [all_window_indices[i] for i in test_idx] # estraggo per ogni indice nel set di test gli indici della finestra originale
+    train_val_consecutivity = all_consecutivity[train_val_idx] # estraggo per ogni indice nel set di train_val le informazioni di consecutività
+    test_fold_consecutivity = all_consecutivity[test_idx] # estraggo per ogni indice nel set di test le informazioni di consecutività
+
+    logger.info(f"Train+Val indices: {len(train_val_indices)} finestre")
+    logger.info(f"Test indices: {len(test_fold_indices)} finestre")
     
     # Ulteriore split di train_val in train e validation (80-20)
     train_val_split = int(0.8 * len(X_train_val))
+    train_fold_size = train_val_split
+    val_fold_size = len(train_val_idx) - train_val_split
+    
+    logger.info(f"  → Train: {train_fold_size} finestre")
+    logger.info(f"  → Val: {val_fold_size} finestre")
     
     X_train_fold = X_train_val[:train_val_split]
     Y_train_fold = Y_train_val[:train_val_split]
     X_val_fold = X_train_val[train_val_split:]
     Y_val_fold = Y_train_val[train_val_split:]
     
-    logger.info(f"Fold {fold + 1} - Train: {X_train_fold.shape}, Val: {X_val_fold.shape}, Test: {X_test_fold.shape}")
-    logger.info(f"Fold {fold + 1} - Distribuzione test: {np.bincount(Y_test_fold)}")
+    # SPLIT DEGLI INDICI E CONSECUTIVITÀ
+    train_indices_fold = train_val_indices[:train_val_split]
+    val_indices_fold = train_val_indices[train_val_split:]
+    train_consecutivity_fold = train_val_consecutivity[:train_val_split]
+    val_consecutivity_fold = train_val_consecutivity[train_val_split:]
 
-    # Creo i dataset per questo fold
-    train_dataset_fold = HARDataset(X_train_fold, Y_train_fold)
-    val_dataset_fold = HARDataset(X_val_fold, Y_val_fold)
-    test_dataset_fold = HARDataset(X_test_fold, Y_test_fold)
+    logger.info(f"Train indices: {len(train_indices_fold)} finestre")
+    logger.info(f"Val indices: {len(val_indices_fold)} finestre")
+    logger.info(f"Test indices: {len(test_fold_indices)} finestre")
+    
+    
+    # Creo i dataset per questo fold CON INDICI E CONSECUTIVITÀ
+    train_dataset_fold = HARDataset(X_train_fold, Y_train_fold, train_indices_fold, train_consecutivity_fold)
+    val_dataset_fold = HARDataset(X_val_fold, Y_val_fold, val_indices_fold, val_consecutivity_fold)
+    test_dataset_fold = HARDataset(X_test_fold, Y_test_fold, test_fold_indices, test_fold_consecutivity)
 
 
     # Ottimizzazione degli iperparametri per questo fold
@@ -277,9 +395,11 @@ for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y)):
         lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
         batch_size = trial.suggest_categorical('batch_size', [2, 4])
         
-        # Creo i DataLoader
-        train_loader = DataLoader(train_dataset_fold, batch_size=batch_size, shuffle=True, drop_last=True)
-        val_loader = DataLoader(val_dataset_fold, batch_size=batch_size, shuffle=False, drop_last=True)
+        # Creo i DataLoader con collate_fn personalizzato
+        train_loader = DataLoader(train_dataset_fold, batch_size=batch_size, shuffle=True, 
+                                drop_last=False, collate_fn=collate_fn)
+        val_loader = DataLoader(val_dataset_fold, batch_size=batch_size, shuffle=False, 
+                              drop_last=False, collate_fn=collate_fn)
         
         # Creo il modello
         model = DeepConvLSTM()
@@ -296,12 +416,21 @@ for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y)):
         model.classification_head = nn.Linear(num_ftrs, 3)
         model.set_n_classes(3)
 
-        for param in model.parameters():
-            param.requires_grad = True
+        """for param in model.parameters():
+            param.requires_grad = True"""
         
-        # Training
+        # FREEZO TUTTI I PARAMETRI ECCETTO LA TESTA (LINEAR PROBING)
+        for name, param in model.named_parameters():
+            if 'classification_head' not in name:
+                param.requires_grad = False
+            else:
+                param.requires_grad = True
+        
+        # Training SENZA salvare i risultati per i trial intermedi
         best_f1_score = train_with_cm.train(model, train_loader, val_loader, 
-                                           epochs=100, batch_size=batch_size, lr=lr)
+                                           epochs=100, batch_size=batch_size, lr=lr,
+                                           figure_name=f"fold_{fold+1}_trial_{trial.number}",
+                                           save_final_results=False, is_best_trial=False)
         
         return best_f1_score
     
@@ -337,27 +466,89 @@ for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y)):
     model_final_fold.classification_head = nn.Linear(num_ftrs, 3)
     model_final_fold.set_n_classes(3)
 
-    for param in model_final_fold.parameters():
-        param.requires_grad = True
+    """for param in model_final_fold.parameters():
+        param.requires_grad = True"""
+    
+    # FREEZO TUTTI I PARAMETRI ECCETTO LA TESTA (LINEAR PROBING)
+    for name, param in model_final_fold.named_parameters():
+        if 'classification_head' not in name:
+            param.requires_grad = False
+        else:
+            param.requires_grad = True
 
     # Training finale per questo fold
-    train_loader_final = DataLoader(train_dataset_fold, batch_size=best_batch_size, shuffle=True, drop_last=True)
-    val_loader_final = DataLoader(val_dataset_fold, batch_size=best_batch_size, shuffle=False, drop_last=True)
+    # Training finale per questo fold con i migliori iperparametri
+    train_loader_final = DataLoader(train_dataset_fold, batch_size=best_batch_size, shuffle=True, 
+                                  drop_last=False, collate_fn=collate_fn)
+    val_loader_final = DataLoader(val_dataset_fold, batch_size=best_batch_size, shuffle=False, 
+                                drop_last=False, collate_fn=collate_fn)
     
-    final_f1_score = train_with_cm.train(model_final_fold, train_loader_final, val_loader_final,
-                                        epochs=100, batch_size=best_batch_size, lr=best_lr)
+    test_loader_fold = DataLoader(test_dataset_fold, batch_size=best_batch_size, shuffle=False, 
+                                drop_last=False, collate_fn=collate_fn)
+    
+    
+    
+    
+    
+    logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
+    logger.info(f"Train dataset size: {len(train_dataset_fold)}")
+    logger.info(f"Val dataset size: {len(val_dataset_fold)}")
+    logger.info(f"Test dataset size: {len(test_dataset_fold)}")
+    logger.info(f"Batch size: {best_batch_size}")
+
+    logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
+    logger.info(f"Train dataset size: {len(train_dataset_fold)}")
+    logger.info(f"Val dataset size: {len(val_dataset_fold)}")
+    logger.info(f"Test dataset size: {len(test_dataset_fold)}")
+    logger.info(f"Batch size: {best_batch_size}")
+
+    # Conta quanti batch effettivi
+    train_batches = len(train_loader_final)
+    val_batches = len(val_loader_final)
+    test_batches = len(test_loader_fold)
+
+    # CALCOLO CORRETTO delle finestre usate (con drop_last=False usa TUTTE)
+    train_samples_used = len(train_dataset_fold)
+    val_samples_used = len(val_dataset_fold)
+    test_samples_used = len(test_dataset_fold)
+
+    logger.info(f"Train batches: {train_batches} (finestre usate: {train_samples_used}/{len(train_dataset_fold)})")
+    logger.info(f"Val batches: {val_batches} (finestre usate: {val_samples_used}/{len(val_dataset_fold)})")
+    logger.info(f"Test batches: {test_batches} (finestre usate: {test_samples_used}/{len(test_dataset_fold)})")
+    
+    # Training finale CON salvataggio dei risultati
+    final_f1_score = train_with_cm.train(
+        model_final_fold, train_loader_final, val_loader_final,
+        epochs=100, batch_size=best_batch_size, lr=best_lr,
+        figure_name=f"kfold_training_fold_{fold+1}",  # NON CONTIENE FINAL
+        save_final_results=False,  #NON SALVO
+        is_best_trial=True,
+        figures_dir=figures_spoon_path, 
+        reports_dir=figures_spoon_path
+    )
     
 
-    # Valutazione sul test set di questo fold
-    # Valutazione sul test set di questo fold
-    test_loader_fold = DataLoader(test_dataset_fold, batch_size=best_batch_size, shuffle=False, drop_last=True)
+    logger.info(f"\n=== PRE-EVALUATE DEBUG ===")
+    logger.info(f"Test dataset size prima di evaluate: {len(test_dataset_fold)}")
+    logger.info(f"Test loader size prima di evaluate: {len(test_loader_fold)}")
+
+    # Testa il primo batch
+    for i, batch in enumerate(test_loader_fold):
+        if i == 0:
+            inputs, targets, indices, consecutivity = batch
+            logger.info(f"Primo batch - inputs shape: {inputs.shape}")
+            logger.info(f"Primo batch - targets shape: {targets.shape}")
+            logger.info(f"Primo batch - indices: {indices}")
+            break
     test_loss, test_acc, test_f1_fold = train_with_cm.evaluate_model(
         model_final_fold, test_loader_fold, 
         figure_name=f"cm_test_fold_{fold + 1}_kfold_inference_3_folds_Tspoon_PTNnone_PTAnone_FTNnone_FTAnone",
         save_confusion_matrix=True, 
         save_predictions_csv=True,
         save_f1_score=True,
-        labels_dict=labels_dict
+        labels_dict=labels_dict,
+        figures_dir=figures_spoon_path,
+        reports_dir=figures_spoon_path
     )
 
     # Salvo il modello di questo fold
@@ -405,7 +596,7 @@ logger.info(f"F1 score test: {best_fold_result['test_f1']:.4f}")
 
 # Salvo i risultati di tutti i fold
 results_df = pd.DataFrame(fold_results)
-results_df.to_csv(os.path.join(REPORTS_DIR, 'kfold_results_inference_spoon_Tspoon_PTNnone_PTAnone_FTNnone_FTAnone.csv'), index=False)
+results_df.to_csv(os.path.join(figures_spoon_path, 'kfold_results_inference_spoon_Tspoon_PTNnone_PTAnone_FTNnone_FTAnone.csv'), index=False)
 
 # Salvo i migliori iperparametri
 best_hyperparameters = best_fold_result['params']
@@ -415,7 +606,7 @@ best_hyperparameters['best_fold'] = best_fold_result['fold']
 
 best_hyperparameters_df = pd.DataFrame([best_hyperparameters])
 best_hyperparameters_df.to_csv(
-    os.path.join(REPORTS_DIR, 'best_hyperparameters_kfold_inference_spoon_Tspoon_PTNnone_PTAnone_FTNnone_FTAnone.csv'), 
+    os.path.join(figures_spoon_path, 'best_hyperparameters_kfold_inference_spoon_Tspoon_PTNnone_PTAnone_FTNnone_FTAnone.csv'), 
     index=False
 )
 
@@ -428,20 +619,34 @@ best_lr_final = best_hyperparameters['lr']
 best_batch_size_final = best_hyperparameters['batch_size']
 
 # Creo dataset con tutti i dati
-full_dataset = HARDataset(X, Y)
-
-# Split finale 85-15 per train-val
-train_size = int(0.85 * len(full_dataset))
-val_size = len(full_dataset) - train_size
-
-train_dataset_final, val_dataset_final = torch.utils.data.random_split(
-    full_dataset, [train_size, val_size], 
-    generator=torch.Generator().manual_seed(random_state)
+final_dataset = HARDataset(
+    X, Y, 
+    window_indices=all_window_indices,
+    consecutivity=all_consecutivity,
+    class_names=class_names
 )
 
-# Creo DataLoader finali
-train_loader_final = DataLoader(train_dataset_final, batch_size=best_batch_size_final, shuffle=True, drop_last=True)
-val_loader_final = DataLoader(val_dataset_final, batch_size=best_batch_size_final, shuffle=False, drop_last=True)
+# Split finale 85-15 per train-val
+train_size = int(0.8 * len(final_dataset))
+val_size = len(final_dataset) - train_size
+final_train_dataset, final_val_dataset = torch.utils.data.random_split(
+    final_dataset, [train_size, val_size]
+)
+
+final_train_loader = DataLoader(
+    final_train_dataset, 
+    batch_size=best_batch_size_final, 
+    shuffle=True, 
+    collate_fn=collate_fn
+)
+
+final_val_loader = DataLoader(
+    final_val_dataset, 
+    batch_size=best_batch_size_final, 
+    shuffle=False, 
+    collate_fn=collate_fn
+)
+
 
 # Creo modello finale
 model_final = DeepConvLSTM()
@@ -456,19 +661,31 @@ num_ftrs = model_final.classification_head.in_features
 model_final.classification_head = nn.Linear(num_ftrs, 3)
 model_final.set_n_classes(3)
 
-for param in model_final.parameters():
-    param.requires_grad = True
+# FREEZO TUTTI I PARAMETRI ECCETTO LA TESTA (LINEAR PROBING)
+for name, param in model_final.named_parameters():
+    if 'classification_head' not in name:
+        param.requires_grad = False
+    else:
+        param.requires_grad = True
 
 # Training finale
 # Training finale
+# Training finale CON salvataggio dei risultati finali
 logger.info("Inizio training finale su tutti i dati...")
 final_f1_score = train_with_cm.train(
-    model_final, train_loader_final, val_loader_final,
-    epochs=100, batch_size=best_batch_size_final, lr=best_lr_final
+    model_final, final_train_loader, final_val_loader,
+    epochs=100, 
+    batch_size=best_batch_size_final, 
+    lr=best_lr_final,
+    figure_name="final_training_all_data",  # Nome che contiene "final" ma NON "fold"
+    save_final_results=True,  # QUI SALVO 
+    is_best_trial=True,
+    figures_dir=figures_spoon_path, 
+    reports_dir=figures_spoon_path
 )
 
 # Salvo il modello finale
-FINAL_MODEL_PATH = os.path.join(MODELS_DIR, "best_model_kfold_final_inference_spoon_Tspoon_PTNnone_PTAnone_FTNnone_FTAnone.pkl")
+FINAL_MODEL_PATH = os.path.join(BEST_MODEL_KFOLD_DIR , "best_model_kfold_final_inference_spoon_Tspoon_PTNnone_PTAnone_FTNnone_FTAnone.pkl")
 torch.save(model_final.state_dict(), FINAL_MODEL_PATH)
 
 logger.info(f"Modello finale salvato: {FINAL_MODEL_PATH}")
@@ -484,6 +701,9 @@ plot_CM(
     Y=Y,
     batch_size=best_batch_size_final,
     figure_name="cm_final_kfold_inference_spoon_all_data_Tspoon_PTNnone_PTAnone_FTNnone_FTAnone",
+    labels_dict=labels_dict,
+    figures_dir=figures_spoon_path,
+    reports_dir=figures_spoon_path,
 )
 
 logger.info("=== PROCEDURA K-FOLD COMPLETATA ===")
@@ -498,9 +718,11 @@ logger.info(f"F1 score finale: {final_f1_score:.4f}")
 #AGGREGAZIONE DELLE CM DI TEST
 
 cm_combined, y_true, y_pred = combine_kfold_confusion_matrices(
-    fold_results_dir=REPORTS_DIR,
+    fold_results_dir=  figures_spoon_path,
     num_folds=3,
     toy_name="spoon",
     save_path="combined_cm_Tspoon_PTNnone_PTAnone_FTNnone_FTAnone.png",
     class_names=class_names,
+    figures_dir= figures_spoon_path,
 )
+

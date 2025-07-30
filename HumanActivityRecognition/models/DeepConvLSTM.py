@@ -15,32 +15,52 @@ import torch
 from torch.utils.data import Dataset
 
 class HARDataset(Dataset):
-    def __init__(self, data, labels, class_names=None):
+    def __init__(self, data, labels, window_indices=None, consecutivity=None, class_names=None):
         """
         Args:
             data (numpy.ndarray): Input data, forma (n_samples, n_features, seq_length).
             labels (numpy.ndarray): Output labels, forma (n_samples,).
+            window_indices (list): Indici originali delle finestre
+            consecutivity (numpy.ndarray): Array booleano per consecutività
         """
         self.data = torch.tensor(data, dtype=torch.float32)
         self.labels = torch.tensor(labels, dtype=torch.long)
-        self.classes=class_names if class_names is not None else [str(i) for i in range(len(np.unique(labels)))]
+        self.classes = class_names if class_names is not None else [str(i) for i in range(len(np.unique(labels)))]
+        
+        if window_indices is not None:
+            self.window_indices = window_indices
+        else:
+            self.window_indices = list(range(len(labels)))
+            
+        if consecutivity is not None:
+            self.consecutivity = consecutivity
+        else:
+            self.consecutivity = [True] * len(labels)  # Default: tutte consecutive
 
     def __len__(self):
         return len(self.labels)
 
     def __getitem__(self, idx):
-        return self.data[idx], self.labels[idx]
+        return (self.data[idx], 
+                self.labels[idx], 
+                self.window_indices[idx], 
+                self.consecutivity[idx])
     
     
 train_on_gpu=check_gpu.check_gpu_availability()
 
 #prende in input un batch di dati
 def collate_fn(batch):
-    X_batch, Y_batch = zip(*batch) #utilizziamo zip per separare i dati dalle etichette all'interno del batch
-    #scompone il batch in due tupple (una contentente tutti gli elementi di x e l'altra gli el di y)
-    X_batch = torch.stack([x.clone().detach() for x in X_batch]) #converte ogni elemento di x_batch in un tensore e poi li impila lungo una nuova dimensione per creare un unico tensore 3d
-    Y_batch = torch.tensor(Y_batch, dtype=torch.long) #converte y_batch in un tensore
-    return X_batch, Y_batch
+    #batch è ubna lista di tuple ritornare da __getitem__ del dataset
+    #ogni tupla contiene (data, label, index, consecutivity)
+    data_batch, labels_batch, indices_batch, consecutivity_batch = zip(*batch)
+    
+    X_batch = torch.stack([x.clone().detach() for x in data_batch])
+    Y_batch = torch.tensor(labels_batch, dtype=torch.long)
+    indices_batch = list(indices_batch)
+    consecutivity_batch = list(consecutivity_batch)
+    
+    return X_batch, Y_batch, indices_batch, consecutivity_batch
 
 
 #prende in input le eutichette y
@@ -122,6 +142,14 @@ class DeepConvLSTM(nn.Module):
     def forward(self, x, hidden, batch_size, single_fc=True):
 
         #print(f"Input iniziale al modello: {x.shape}")
+        # Se  feature aggiuntive (indici, consecutività), estraggo solo i sensori
+        if x.shape[2] > self.nb_sensor_channels:
+            # Prendo solo le prime nb_sensor_channels feature (i sensori)
+            x_sensors = x[:, :, :self.nb_sensor_channels]
+            print(f"Shape dopo estrazione sensori: {x_sensors.shape}")
+            x = x_sensors
+        else:
+            x_sensors = x
         #-1 sta calcolando automaticamente la dimensione rimanente (batchsize),
         x = x.reshape(-1, self.nb_sensor_channels, self.sliding_window_length)
         #print(f"Dopo reshape per convoluzione: {x.shape}")
