@@ -1,2 +1,0 @@
-lr,batch_size,mean_test_f1,std_test_f1,best_fold
-0.03051281421488714,2,0.2222222222222222,0.0,1
