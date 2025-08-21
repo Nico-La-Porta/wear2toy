@@ -124,6 +124,16 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
                 indices = list(range(len(targets)))
                 consecutivity = [True] * len(targets)
             
+            if isinstance(indices, torch.Tensor):
+                indices = indices.cpu().numpy().tolist()
+            if isinstance(consecutivity, torch.Tensor):
+                consecutivity = consecutivity.cpu().numpy().tolist()
+                
+            # Se indices è ancora problematico, usa range semplice
+            if not isinstance(indices, (list, tuple)):
+                indices = list(range(len(targets)))
+            if not isinstance(consecutivity, (list, tuple)):
+                consecutivity = [True] * len(targets)
             inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
             targets = targets.view(-1)
             batch_size = inputs.size(0)
@@ -177,6 +187,16 @@ def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int
                     else:
                         inputs, targets = batch_data
                         indices = list(range(len(targets)))
+                        consecutivity = [True] * len(targets)
+                    if isinstance(indices, torch.Tensor):
+                        indices = indices.cpu().numpy().tolist()
+                    if isinstance(consecutivity, torch.Tensor):
+                        consecutivity = consecutivity.cpu().numpy().tolist()
+                    
+                    # Se indices è ancora problematico, usa range semplice
+                    if not isinstance(indices, (list, tuple)):
+                        indices = list(range(len(targets)))
+                    if not isinstance(consecutivity, (list, tuple)):
                         consecutivity = [True] * len(targets)
 
                     batch_size = inputs.size(0)

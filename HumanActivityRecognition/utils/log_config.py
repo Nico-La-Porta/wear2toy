@@ -24,6 +24,11 @@ log_file_path = os.path.join(log_dir, f"{script_name}.log")
 if 'file' in log_config['handlers']:
     log_config['handlers']['file']['filename'] = log_file_path
 
+
+error_log_file_path = os.path.join(log_dir, f"{script_name}_error.log")
+if 'error_file' in log_config['handlers']: # Controlla se l'handler 'error_file' esiste
+    log_config['handlers']['error_file']['filename'] = error_log_file_path
+
 logging.config.dictConfig(log_config)
 logger = logging.getLogger('myapp')
 

@@ -4,6 +4,7 @@ import argparse
 import shutil
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 import glob
 import torch
 import torch.nn as nn
@@ -29,6 +30,269 @@ from utils.transformations import *
 from utils.transformations_utils import *
 
 
+
+# STEP 2: FUNZIONE DI DOWNSAMPLING SELETTIVO
+# =============================================================================
+logger.info("=== DEFINIZIONE FUNZIONE DI DOWNSAMPLING ===")
+
+def count_padding_in_window(window):
+    """
+    Conta il numero di time steps (righe) che sono interamente padding (tutti zeri).
+    """
+    if window.ndim == 1:
+        # Se la finestra è 1D, conta i singoli zeri
+        return np.sum(window == 0)
+    else:
+        # Se la finestra è 2D (time_steps, features), conta le righe di soli zeri
+        padding_rows = np.all(window == 0, axis=1)
+        return np.sum(padding_rows)
+
+def selective_downsampling_by_padding(X, Y, kid_action_counts, toy_name, max_windows_per_kid_action=50, toys_to_downsample=None):
+    """
+    Filtra le finestre per specifiche categorie di giocattoli, limitandole a 
+    max_windows_per_kid_action finestre per ogni combinazione bambino/azione,
+    eliminando prima quelle con più padding.
+    
+    Args:
+        X (np.array): L'array delle finestre dei dati.
+        Y (np.array): L'array delle etichette corrispondenti.
+        kid_action_counts (dict): Dizionario con la struttura {action_key: {kid_id: count}}.
+        max_windows_per_kid_action (int): Numero massimo di finestre da mantenere per gruppo.
+        toys_to_downsample (list): Lista di stringhe dei nomi dei giocattoli da sottoporre a downsampling 
+                                     (es. ['car', 'doll', 'elephant']). Se None, non viene applicato alcun filtro.
+    
+    Returns:
+        tuple: (X_filtered, Y_filtered, kid_action_counts_filtered)
+    """
+    if toys_to_downsample is None:
+        logger.warning("Nessun giocattolo specificato per il downsampling. Restituzione dei dati originali.")
+        return X, Y, kid_action_counts
+
+    logger.info(f"Avvio downsampling selettivo per i giocattoli: {toys_to_downsample}")
+    logger.info(f"Numero massimo di finestre per bambino/azione target: {max_windows_per_kid_action}")
+
+    # 1. Mappatura di ogni finestra con i suoi metadati (indice, bambino, azione, padding)
+    window_metadata = []
+    current_idx = 0
+    for action_key, kid_dict in kid_action_counts.items():
+        # Estrai il nome dell'azione (es. 'car_1', 'doll_put')
+        # Questa logica potrebbe dover essere adattata alla struttura esatta dei tuoi action_key
+        action_name = str(Y[current_idx]) # Modo robusto per ottenere l'etichetta dell'azione
+        
+        for kid_id, window_count in kid_dict.items():
+            for i in range(window_count):
+                idx = current_idx + i
+                window_metadata.append({
+                    'index': idx,
+                    'kid_id': kid_id,
+                    'action_key': action_key, # Manteniamo la chiave originale per coerenza
+                    'padding_count': count_padding_in_window(X[idx])
+                })
+            current_idx += window_count
+    
+    # 2. Raggruppamento delle finestre per bambino e azione
+    kid_action_groups = defaultdict(list)
+    for metadata in window_metadata:
+        key = (metadata['kid_id'], metadata['action_key'])
+        kid_action_groups[key].append(metadata)
+
+    # 3. Logica di filtraggio
+    indices_to_keep = []
+    
+    for (kid_id, action_key), windows in kid_action_groups.items():
+        # Verifica se l'azione appartiene a un giocattolo da filtrare
+        # Questo controllo assume che il nome del giocattolo sia nell'action_key
+        apply_downsampling = any(toy in action_key for toy in toys_to_downsample)
+
+        if apply_downsampling and len(windows) > max_windows_per_kid_action:
+            # Ordina le finestre in base al padding (crescente, quindi meno padding prima)
+            windows_sorted = sorted(windows, key=lambda w: w['padding_count'])
+            
+            # Seleziona le migliori 'max_windows_per_kid_action' finestre
+            selected_windows = windows_sorted[:max_windows_per_kid_action]
+            indices_to_keep.extend([w['index'] for w in selected_windows])
+            
+            logger.info(f"Gruppo '{kid_id}-{action_key}': ridotto da {len(windows)} a {len(selected_windows)} finestre.")
+        else:
+            # Mantieni tutte le finestre se non superano il limite o se il giocattolo non è target
+            indices_to_keep.extend([w['index'] for w in windows])
+            if apply_downsampling:
+                 logger.info(f"Gruppo '{kid_id}-{action_key}': mantenute tutte le {len(windows)} finestre (sotto la soglia).")
+            # else:
+            #      logger.info(f"Gruppo '{kid_id}-{action_key}': mantenute tutte le {len(windows)} finestre (giocattolo non target).")
+
+
+    # 4. Creazione dei nuovi array e del dizionario dei conteggi
+    indices_to_keep.sort()
+    X_filtered = X[indices_to_keep]
+    Y_filtered = Y[indices_to_keep]
+
+    # Ricostruisci kid_action_counts_filtered basandoti sui dati filtrati
+    kid_action_counts_filtered = defaultdict(lambda: defaultdict(int))
+    # È necessario un modo per mappare gli indici filtrati a kid_id e action_key
+    # Riutilizziamo i metadati, ma solo per gli indici che abbiamo mantenuto
+    kept_metadata = [meta for meta in window_metadata if meta['index'] in indices_to_keep]
+    for meta in kept_metadata:
+        kid_action_counts_filtered[meta['action_key']][meta['kid_id']] += 1
+
+    logger.info("Downsampling completato.")
+    logger.info(f"Finestre originali: {len(X)}")
+    logger.info(f"Finestre mantenute: {len(X_filtered)}")
+    logger.info(f"Finestre rimosse: {len(X) - len(X_filtered)}")
+    
+    return X_filtered, Y_filtered, dict(kid_action_counts_filtered)
+def create_single_distribution_bar_chart(Y, toy_name="Dataset", save_path=None, title_suffix=" ", use_class_prefix=True):
+    """
+    Crea un bar diagram publication-ready per una singola distribuzione
+    
+    Parameters:
+    - Y: array delle etichette
+    - toy_name: nome del dataset/giocattolo 
+    - save_path: percorso per salvare il grafico (opzionale)
+    - title_suffix: suffisso per il titolo (es. "Complete Dataset", "Training Set", etc.)
+    """
+    
+    # Calcola la distribuzione
+    distribution = Counter(Y)
+    
+    # Ottieni tutte le classi uniche ordinate
+    all_classes = sorted(distribution.keys())
+    
+    # Calcola il totale
+    total_samples = len(Y)
+    
+    # Prepara i dati per il grafico
+    counts = [distribution[cls] for cls in all_classes]
+    percentages = [(count / total_samples) * 100 for count in counts]
+    
+    # Crea il grafico con stile LNCS
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Colori professionali
+    colors = ['#2C3E50', '#E74C3C', '#3498DB', '#27AE60', '#F39C12', '#9B59B6', '#1ABC9C', '#34495E']
+    bar_colors = [colors[i % len(colors)] for i in range(len(all_classes))]
+    
+    # Crea le barre
+    bars = ax.bar(range(len(all_classes)), percentages, color=bar_colors, 
+                  alpha=0.8, edgecolor='black', linewidth=0.8, hatch='///')
+    
+    # Personalizza il grafico per LNCS
+    ax.set_xlabel('Activity Class', fontsize=16, fontweight='bold')
+    ax.set_ylabel('Percentage (%)', fontsize=16, fontweight='bold')
+    ax.set_title(f'{toy_name}  {title_suffix}', fontsize=16, fontweight='bold', pad=20)
+    ax.set_xticks(range(len(all_classes)))
+    if use_class_prefix and all(isinstance(cls, (int, float)) for cls in all_classes):
+        # Se sono numeri, aggiungi "C"
+        ax.set_xticklabels([f'C{cls}' for cls in all_classes], fontsize=12)
+    else:
+        # Se sono stringhe (nomi azioni), usali direttamente
+        ax.set_xticklabels(all_classes, fontsize=12, rotation=45, ha='right')
+    ax.tick_params(axis='y', labelsize=12)
+    
+    # Griglia professionale
+    ax.grid(axis='y', alpha=0.3, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
+    
+    # Rimuovi spines superiori e destri
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(0.8)
+    ax.spines['bottom'].set_linewidth(0.8)
+    
+    # Aggiungi percentuali sopra le barre
+    for i, (bar, percentage, count) in enumerate(zip(bars, percentages, counts)):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.8,
+               f'{percentage:.1f}%\n({count})', ha='center', va='bottom', 
+               fontsize=10, fontweight='bold')
+    
+    # Layout professionale
+    plt.tight_layout()
+    
+    # Salva il grafico in formato publication-ready
+    if save_path:
+        base_path = save_path.rsplit('.', 1)[0] if '.' in save_path else save_path
+        
+        # PDF per LaTeX (preferito per LNCS)
+        plt.savefig(f"{base_path}.pdf", dpi=300, bbox_inches='tight', 
+                   format='pdf', facecolor='white', edgecolor='none')
+        
+        # PNG ad alta risoluzione
+        plt.savefig(f"{base_path}.png", dpi=300, bbox_inches='tight', 
+                   format='png', facecolor='white', edgecolor='none')
+        
+        print(f"Grafico salvato in: {base_path}.[pdf|png]")
+
+         # SVG vettoriale
+        plt.savefig(f"{base_path}.svg", bbox_inches='tight', 
+                   format='svg', facecolor='white', edgecolor='none')
+        
+        print(f"Grafico salvato in: {base_path}.[pdf|png|svg]")
+    
+    #plt.show()
+    
+    # Stampa statistiche per il paper
+    print(f"\n=== {toy_name} - {title_suffix} Statistics ===")
+    print(f"Total samples: {total_samples}")
+    print(f"Number of classes: {len(all_classes)}")
+    
+    # Stampa dettaglio per classe
+    print("\nClass Details:")
+    for i, cls in enumerate(all_classes):
+        print(f"  Class C{cls}: {counts[i]} samples ({percentages[i]:.1f}%)")
+    
+    # Identifica classi problematiche
+    min_count = min(counts)
+    max_count = max(counts)
+    if min_count < 10:
+        rare_classes = [all_classes[i] for i, count in enumerate(counts) if count < 10]
+        print(f"\nWARNING: Classes with <10 samples: {rare_classes}")
+    
+    if max_count / min_count > 10:
+        print(f"WARNING: High class imbalance detected! Ratio: {max_count/min_count:.2f}")
+    
+    return fig
+
+def log_and_plot_distribution(Y, title_prefix, toy_name, toy_mapping, save_dir):
+    """
+    Prepara i dati e chiama la funzione di plotting per la distribuzione delle classi,
+    utilizzando la funzione di conversione specializzata del progetto.
+    """
+    logger.info(f"===== ANALISI DISTRIBUZIONE: {title_prefix} - {toy_name.upper()} =====")
+
+    if len(Y) == 0:
+        logger.warning("L'array Y è vuoto. Impossibile mostrare la distribuzione.")
+        return
+
+    # --- INIZIO MODIFICA CHIAVE ---
+    # Invece di fare una ricerca manuale nel dizionario, usiamo la tua funzione che già funziona!
+    # Questa funzione gestirà correttamente qualsiasi problema di tipo (float vs int) o altre logiche.
+    try:
+        logger.info("Conversione degli ID numerici in nomi di azioni tramite 'convert_original_to_names'...")
+        Y_names = mapping_activity.convert_original_to_names(Y, toy_name.upper())
+    except Exception as e:
+        logger.error(f"ERRORE: La funzione 'convert_original_to_names' ha fallito: {e}")
+        logger.error("Ritorno al metodo di fallback (potrebbe mostrare degli 'ID_...')")
+        # Fallback nel caso in cui la funzione non esista o dia errore
+        labels_dict = toy_mapping["encoded_to_name"]
+        Y_names = [labels_dict.get(int(y), f"ID_{y}") for y in Y]
+    # --- FINE MODIFICA CHIAVE ---
+    
+    # Crea un nome di file pulito
+    file_suffix = title_prefix.lower().replace(" ", "_").replace("(", "").replace(")", "")
+    save_path_base = os.path.join(save_dir, f"{toy_name}_distribuzione_{file_suffix}")
+
+    # Chiama la tua funzione di plotting (questa parte non cambia)
+    fig = create_single_distribution_bar_chart(
+        Y=Y_names,
+        toy_name=toy_name.upper(),
+        title_suffix=f"({title_prefix})",
+        save_path=save_path_base,
+        use_class_prefix=False
+    )
+    
+    # Chiudi la figura per evitare che rimanga aperta in memoria
+    if fig:
+        plt.close(fig)
 def parse_args():
     """
     Analizza gli argomenti della riga di comando per configurare l'esperimento.
@@ -52,7 +316,7 @@ def parse_args():
     
     #Strategia di Tuning
     parser.add_argument('--tuning-strategy', type=str, default='fft', choices=['lp', 'fft'],
-                        help='Strategia di fine-tuning: "lp" (linear probing con testa a singolo layer) o "fft" (full fine-tuning con testa sequenziale).')
+                        help='Strategia di fine-tuning: "lp" (linear probing con testa sequenziale) o "fft" (full fine-tuning con testa sequenziale).')
     parser.add_argument('--holdout-kids', nargs='*', type=int, default=None, help='Lista di ID di bambini da usare come hold-out test set.')
     # Parametri generali dell'esperimento
     parser.add_argument('--k-folds', type=int, default=3, help='Numero di fold per la cross-validation.')
@@ -69,7 +333,7 @@ def get_pretrained_model_path(pt_norm, pt_aug):
     """
     Restituisce il path del modello pre-addestrato corretto in base alla configurazione.
     """
-    base_path = r'C:\codes\HumanActivityRecognition\models'
+    base_path = r'D:\codes\HumanActivityRecognition\models'
     
     if pt_norm == 'meanstd' and pt_aug == 'alltrs':
         return os.path.join(base_path, 'best_model_dl_norm_mean_std_and_aug.pkl')
@@ -96,8 +360,13 @@ def configure_model_for_tuning(model, tuning_strategy, num_classes):
 
     if tuning_strategy == 'lp':
         # LINEAR PROBING: linear head, corpo congelato
-        logger.info("Costruzione di una testa a singolo layer (nn.Linear).")
-        model.classification_head = nn.Linear(n_hidden, num_classes)
+        logger.info("Costruzione di una testa a singolo layer (nn.Sequential).")
+
+        model.classification_head = nn.Sequential(
+            nn.Linear(n_hidden, n_hidden // 2),
+            nn.ReLU(),
+            nn.Linear(n_hidden // 2, num_classes)
+        )
         
         logger.info("Congelamento dei layer del backbone per Linear Probing.")
         # Congelamento di tutti i parametri...
@@ -180,6 +449,13 @@ def main(args):
         f"T{args.toy}_PTN{args.pt_norm}_PTA{args.pt_aug}_"
         f"FTN{args.ft_norm}_FTA{args.ft_aug}_TS{args.tuning_strategy}"
     )
+    # Crea cartelle specifiche per questo esperimento
+    exp_models_dir = os.path.join(MODELS_DIR, exp_name)
+    exp_figures_dir = os.path.join(FIGURES_DIR, exp_name)
+    exp_reports_dir = os.path.join(REPORTS_DIR, exp_name)
+    os.makedirs(exp_models_dir, exist_ok=True)
+    os.makedirs(exp_figures_dir, exist_ok=True)
+    os.makedirs(exp_reports_dir, exist_ok=True)
     logger.info(f"===== INIZIO ESPERIMENTO: {exp_name} =====")
 
     data_path = "C:\\codes\\HumanActivityRecognition\\data\\downstream_data"
@@ -194,7 +470,9 @@ def main(args):
         df_train_val = df_toy[~df_toy['kid_id'].isin(args.holdout_kids)]
         logger.info(f"Dimensioni Training/Validation set: {df_train_val.shape}")
         logger.info(f"Dimensioni Hold-out Test set: {df_test_holdout.shape}")
-    
+    else:
+        logger.info("Nessun hold-out set specificato: Esecuzione K-Fold su tutto il dataset.")
+
     # --- Normalizzazione ---
     df_normalized = pd.DataFrame()
     mean, std = None, None
@@ -253,6 +531,48 @@ def main(args):
     X = np.concatenate(X_list, axis=0)
     Y = np.concatenate(Y_list, axis=0).flatten()
     all_consecutivity = np.array(all_consecutivity)
+
+    log_and_plot_distribution(
+    Y=Y,
+    title_prefix="Distribuzione Iniziale (Prima del Downsampling)",
+    toy_name=args.toy,
+    toy_mapping=toy_mapping,
+    save_dir=exp_figures_dir
+)
+
+    # =============================================================================
+    # STEP AGGIUNTO: APPLICAZIONE DEL DOWNSAMPLING SELETTIVO
+    # =============================================================================
+    logger.info("=== CONTROLLO ED ESECUZIONE DOWNSAMPLING SELETTIVO ===")
+    
+    # Definisci i giocattoli su cui applicare il downsampling
+    TARGET_TOYS_FOR_DOWNSAMPLING = ['car', 'doll', 'elephant']
+    MAX_WINDOWS_PER_KID_ACTION = 50
+
+    # Applica la funzione solo se il giocattolo corrente è nella lista target
+    # La funzione stessa si occuperà di tutto e aggiornerà le variabili X, Y e kid_action_counts
+    X, Y, kid_action_counts = selective_downsampling_by_padding(
+        X, Y, kid_action_counts, 
+        toy_name=args.toy,
+        max_windows_per_kid_action=MAX_WINDOWS_PER_KID_ACTION,
+        toys_to_downsample=TARGET_TOYS_FOR_DOWNSAMPLING
+    )
+    # =============================================================================
+
+    log_and_plot_distribution(
+    Y=Y, # Y qui è stato potenzialmente modificato dal downsampling
+    title_prefix="Distribuzione Finale (Dopo il Downsampling)",
+    toy_name=args.toy,
+    toy_mapping=toy_mapping,
+    save_dir=exp_figures_dir
+)
+
+    # Ora il codice continua con le variabili X e Y potenzialmente ridotte
+    unique_labels = np.unique(Y)
+    label_mapping = {label: i for i, label in enumerate(unique_labels)}
+    Y_mapped = np.array([label_mapping[y] for y in Y])
+    
+    num_classes = len(unique_labels)
     
     unique_labels = np.unique(Y)
     label_mapping = {label: i for i, label in enumerate(unique_labels)}
@@ -266,12 +586,18 @@ def main(args):
 
     skf = StratifiedKFold(n_splits=args.k_folds, shuffle=True, random_state=args.random_state)
     all_fold_scores = []
+
+
     
-    exp_models_dir = os.path.join(MODELS_DIR, exp_name)
-    os.makedirs(exp_models_dir, exist_ok=True)
+    
     
     pretrained_model_path = get_pretrained_model_path(args.pt_norm, args.pt_aug)
     logger.info(f"Utilizzo del modello pre-addestrato: {pretrained_model_path}")
+
+    # Dizionario per i risultati
+    fold_results = {
+        'fold': [], 'best_f1_score': [], 'best_params': [], 'test_f1_score': []
+    }
 
     for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y_mapped)):
         
@@ -288,7 +614,7 @@ def main(args):
         
         test_window_ids = [all_window_indices[i]['global_window_id'] for i in test_idx]
         logger.info(f"Global IDs delle finestre nel set di test (primi 10): {test_window_ids[:10]}")
-        # --- FINE BLOCCO DI DEBUG ---
+       
 
         X_train_val, X_test_fold = X[train_val_idx], X[test_idx]
         Y_train_val, Y_test_fold = Y_mapped[train_val_idx], Y_mapped[test_idx]
@@ -315,8 +641,8 @@ def main(args):
                 time_warp_transform_improved, time_warp_transform_low_cost
             ])
             X_train_aug = transformation_function(X_train_fold)
-            X_train_fold = np.concatenate([X_train_fold, X_train_aug])
-            Y_train_fold = np.concatenate([Y_train_fold, Y_train_fold.copy()])
+            X_train_fold = np.concatenate([X_train_fold, X_train_aug], axis=0)
+            Y_train_fold = np.concatenate([Y_train_fold, Y_train_fold.copy()], axis=0)
 
         train_dataset = HARDataset(X_train_fold, Y_train_fold, train_indices_meta, train_consec)
         val_dataset = HARDataset(X_val_fold, Y_val_fold, val_indices_meta, val_consec)
@@ -327,44 +653,111 @@ def main(args):
             lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
             batch_size = trial.suggest_categorical('batch_size', [2, 4])
             
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
             
             model = DeepConvLSTM()
             model.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
             model = configure_model_for_tuning(model, args.tuning_strategy, num_classes)
 
-            best_f1 = train_with_cm.train(model, train_loader, val_loader, epochs=args.epochs, batch_size=batch_size, lr=lr)
+            # Non salviamo i risultati per i trial intermedi di Optuna
+            best_f1 = train_with_cm.train(model, train_loader, val_loader, 
+                                          epochs=args.epochs, batch_size=batch_size, lr=lr,
+                                          save_final_results=False)
             return best_f1
-
+        # Ottimizzazione per questo fold
+        logger.info(f"Inizio ottimizzazione iperparametri per fold {fold + 1}")
         study = optuna.create_study(direction='maximize', pruner=MedianPruner())
         study.optimize(objective_fold, n_trials=args.n_trials)
         
-        best_params = study.best_params
-        best_f1 = study.best_value
-        logger.info(f"Migliori iperparametri per il fold {fold + 1}: {best_params} (F1-score: {best_f1:.4f})")
+        best_params_fold = study.best_params
+        best_f1_fold = study.best_value
+        logger.info(f"Migliori iperparametri per il fold {fold + 1}: {best_params_fold} (Val F1: {best_f1_fold:.4f})")
 
         model_final_fold = DeepConvLSTM()
         model_final_fold.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
         model_final_fold = configure_model_for_tuning(model_final_fold, args.tuning_strategy, num_classes)
         
-        train_loader_final = DataLoader(train_dataset, batch_size=best_params['batch_size'], shuffle=True, drop_last=True)
-        val_loader_final = DataLoader(val_dataset, batch_size=best_params['batch_size'], shuffle=False, drop_last=True)
-        test_loader = DataLoader(test_dataset, batch_size=best_params['batch_size'], shuffle=False, drop_last=True)
+        train_loader_final = DataLoader(train_dataset, bbatch_size=best_params_fold['batch_size'], shuffle=True, drop_last=False)
+        val_loader_final = DataLoader(val_dataset, bbatch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
+        test_loader = DataLoader(test_dataset, bbatch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
 
-        train_with_cm.train(model_final_fold, train_loader_final, val_loader_final, epochs=args.epochs, **best_params)
+        logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
+        logger.info(f"Train dataset size: {len(train_dataset)}")
+        logger.info(f"Val dataset size: {len(val_dataset)}")
+        logger.info(f"Test dataset size: {len(test_dataset)}")
+
+        logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
+        logger.info(f"Train dataset size: {len(train_dataset)}")
+        logger.info(f"Val dataset size: {len(val_dataset)}")
+        logger.info(f"Test dataset size: {len(test_dataset)}")
         
-        _, _, test_f1 = train_with_cm.evaluate_model(
-            model_final_fold, test_loader,
+
+        # Conta quanti batch effettivi
+        train_batches = len(train_loader_final)
+        val_batches = len(val_loader_final)
+        test_batches = len(test_loader)
+
+        # CALCOLO CORRETTO delle finestre usate (con drop_last=False usa TUTTE)
+        train_samples_used = len(train_dataset)
+        val_samples_used = len(val_dataset)
+        test_samples_used = len(test_dataset)
+
+        logger.info(f"Train batches: {train_batches} (finestre usate: {train_samples_used}/{len(train_dataset)})")
+        logger.info(f"Val batches: {val_batches} (finestre usate: {val_samples_used}/{len(val_dataset)})")
+        logger.info(f"Test batches: {test_batches} (finestre usate: {test_samples_used}/{len(test_dataset)})")
+
+        logger.info("Inizio training finale per il fold con i migliori iperparametri...")
+        train_with_cm.train(
+            model_final_fold, train_loader_final, val_loader_final,
+            epochs=args.epochs, 
+            batch_size=best_params_fold['batch_size'], 
+            lr=best_params_fold['lr'],
+            figure_name=f"kfold_training_fold_{fold+1}_{exp_name}",
+            save_final_results=True, # Salviamo i grafici di training/val del fold
+            is_best_trial=True,      # Indica che questo è il training "reale" del fold
+            figures_dir=exp_figures_dir, 
+            reports_dir=exp_reports_dir
+        )
+        # --- BLOCCO DI DEBUG PRE-VALUTAZIONE ---
+        logger.info(f"\n=== PRE-EVALUATE DEBUG (Fold {fold+1}) ===")
+        logger.info(f"Test dataset size prima di evaluate: {len(test_dataset)}")
+        logger.info(f"Test loader size prima di evaluate: {len(test_loader)}")
+        if len(test_loader) > 0:
+            for i, batch in enumerate(test_loader):
+                if i == 0:
+                    inputs, targets, indices, _ = batch
+                    logger.info(f"Primo batch di test - inputs shape: {inputs.shape}")
+                    logger.info(f"Primo batch di test - targets shape: {targets.shape}")
+                    logger.info(f"Primo batch di test - indices: {indices}")
+                    break
+
+                
+        _, _, test_f1_fold = train_with_cm.evaluate_model(
+            model_final_fold, test_loader, 
             figure_name=f"cm_test_fold_{fold + 1}_{exp_name}",
-            save_confusion_matrix=True, save_predictions_csv=True, save_f1_score=True,
-            labels_dict=labels_dict
+            save_confusion_matrix=True, 
+            save_predictions_csv=True,
+            save_f1_score=True,
+            labels_dict=labels_dict,
+            figures_dir=exp_figures_dir, # Specifica dove salvare i file
+            reports_dir=exp_reports_dir  # Specifica dove salvare i report
         )
 
-        model_path = os.path.join(exp_models_dir, f"best_model_fold_{fold + 1}.pkl")
-        torch.save(model_final_fold.state_dict(), model_path)
+        model_path_fold = os.path.join(exp_models_dir, f"best_model_fold_{fold + 1}.pkl")
+        torch.save(model_final_fold.state_dict(), model_path_fold)
 
-        all_fold_scores.append({'fold': fold + 1, 'params': best_params, 'val_f1': best_f1, 'test_f1': test_f1, 'model_path': model_path})
+        fold_results['fold'].append(fold + 1)
+        fold_results['best_f1_score'].append(best_f1_fold)
+        fold_results['best_params'].append(best_params_fold)
+        fold_results['test_f1_score'].append(test_f1_fold)
+        
+        all_fold_scores.append({
+            'fold': fold + 1, 'params': best_params_fold, 'val_f1': best_f1_fold,
+            'test_f1': test_f1_fold, 'model_path': model_path_fold
+        })
+        
+        logger.info(f"Fold {fold + 1} completato - Test F1: {test_f1_fold:.4f}")
 
     logger.info("\n===== RISULTATI K-FOLD CROSS-VALIDATION =====")
     test_f1_scores = [res['test_f1'] for res in all_fold_scores]

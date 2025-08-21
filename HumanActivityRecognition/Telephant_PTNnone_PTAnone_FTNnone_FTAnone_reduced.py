@@ -35,6 +35,10 @@ from utils.transformations import *
 from utils.transformations_utils import *
 import sys
 
+# Configurazione limite finestre per (kid, action)
+MAX_WINDOWS_PER_KID_ACTION = int(os.getenv('MAX_WINDOWS_PER_KID_ACTION', '50'))  # override con variabile d'ambiente
+logger.info(f"Impostato MAX_WINDOWS_PER_KID_ACTION={MAX_WINDOWS_PER_KID_ACTION}")
+
 
 #definisco il path da cui leggere i .csv
 
@@ -397,12 +401,12 @@ logger.info("=== APPLICAZIONE FILTRO FINESTRE PER BAMBINO/AZIONE ===")
 
 # Applico il filtro
 X_filtered, Y_filtered, kid_action_counts_filtered = filter_windows_by_padding(
-    X, Y, kid_action_counts, max_windows_per_kid_action=50
+    X, Y, kid_action_counts, max_windows_per_kid_action=MAX_WINDOWS_PER_KID_ACTION
 )
 
 #APPLICO il filtro anche sui dati di test
 X_Test_filtered, Y_Test_filtered, kid_action_counts_test_filtered = filter_windows_by_padding(
-    X_Test, Y_Test, kid_action_counts_test, max_windows_per_kid_action=50
+    X_Test, Y_Test, kid_action_counts_test, max_windows_per_kid_action=MAX_WINDOWS_PER_KID_ACTION
 )
 
 # Aggiorno le variabili principali
