@@ -196,15 +196,15 @@ def combine_kfold_confusion_matrices(exp_reports_dir, num_folds, class_names, ex
     
     # Crea e salva il grafico
     plt.figure(figsize=(12, 10))
-    sns.heatmap(cm_combined, annot=True, fmt='d', cmap='Blues', 
+    sns.heatmap(cm_combined, annot=True, fmt='d', cmap='Greys', 
                 xticklabels=class_names, yticklabels=class_names)
     plt.title(f'Combined Confusion Matrix ({num_folds}-Fold CV)', fontsize=16)
-    plt.xlabel('Predicted Label', fontsize=14)
-    plt.ylabel('True Label', fontsize=14)
+    plt.xlabel('Predicted Label', fontsize=16)
+    plt.ylabel('True Label', fontsize=16)
     plt.tight_layout()
 
     save_path = os.path.join(exp_figures_dir, "cm_AGGREGATED_kfold.png")
-    plt.savefig(save_path, dpi=300)
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
     logger.info(f"Matrice di confusione aggregata salvata in: {save_path}")
 

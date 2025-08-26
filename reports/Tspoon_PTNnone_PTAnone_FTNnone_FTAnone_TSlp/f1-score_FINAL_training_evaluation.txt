@@ -1,0 +1,8 @@
+F1-Score (Macro): 0.415054
+F1-Score (Micro): 0.592593
+F1-Score (Weighted): 0.553405
+
+F1-Score per classe:
+0: 0.645161
+1: 0.000000
+2: 0.600000

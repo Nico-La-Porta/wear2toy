@@ -1,0 +1,10 @@
+global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,predicted_action
+0,2,0,1,False,move,hold
+1,2,0,1,False,move,hold
+3,2,0,0,False,move,hold
+7,2,0,1,False,move,hold
+12,0,0,1,True,hold,hold
+13,0,0,1,True,hold,hold
+15,0,0,1,True,hold,hold
+22,0,0,1,True,hold,hold
+25,1,0,1,False,throw,hold
