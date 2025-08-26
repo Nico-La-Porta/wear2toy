@@ -21,7 +21,7 @@ logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 #definisco il path da cui leggere i .csv
 
 from utils.log_config import logger
-from figures import plot_CM, combine_kfold_confusion_matrices
+from HumanActivityRecognition.utils.figures import plot_CM, combine_kfold_confusion_matrices
 from utils import mapping_activity
 
 import normalization

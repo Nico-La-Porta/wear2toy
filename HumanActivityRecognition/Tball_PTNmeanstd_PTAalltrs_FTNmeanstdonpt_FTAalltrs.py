@@ -1,4 +1,4 @@
-import os
+simport os
 import pandas as pd
 import numpy as np
 from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 #definisco il path da cui leggere i .csv
 
 from utils.log_config import logger
-from figures import plot_CM, combine_kfold_confusion_matrices
+from HumanActivityRecognition.utils.figures import plot_CM, combine_kfold_confusion_matrices
 import normalization
 from utils import mapping_activity
 from sklearn.model_selection import StratifiedKFold

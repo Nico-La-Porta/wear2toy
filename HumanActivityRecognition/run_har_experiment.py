@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.model_selection import StratifiedKFold
+from sklearn.utils.class_weight import compute_class_weight
 from collections import Counter
 from collections import defaultdict
 
@@ -23,15 +24,16 @@ import sliding_window_on_data
 from models.DeepConvLSTM import DeepConvLSTM, HARDataset
 import train_with_cm
 import normalization
+from utils.focal_loss import FocalLoss, LabelSmoothingCrossEntropy, WeightedCrossEntropyLoss, CombinedLoss
 from utils.log_config import logger
-from figures import plot_CM, combine_kfold_confusion_matrices
+from utils.figures import combine_kfold_confusion_matrices
 from utils import mapping_activity
 from utils.transformations import *
 from utils.transformations_utils import *
 
 
 
-# STEP 2: FUNZIONE DI DOWNSAMPLING SELETTIVO
+# FUNZIONE DI DOWNSAMPLING SELETTIVO
 # =============================================================================
 logger.info("=== DEFINIZIONE FUNZIONE DI DOWNSAMPLING ===")
 
@@ -71,13 +73,12 @@ def selective_downsampling_by_padding(X, Y, kid_action_counts, toy_name, max_win
     logger.info(f"Avvio downsampling selettivo per i giocattoli: {toys_to_downsample}")
     logger.info(f"Numero massimo di finestre per bambino/azione target: {max_windows_per_kid_action}")
 
-    # 1. Mappatura di ogni finestra con i suoi metadati (indice, bambino, azione, padding)
+    # Mappatura di ogni finestra con i suoi metadati (indice, bambino, azione, padding)
     window_metadata = []
     current_idx = 0
     for action_key, kid_dict in kid_action_counts.items():
-        # Estrai il nome dell'azione (es. 'car_1', 'doll_put')
-        # Questa logica potrebbe dover essere adattata alla struttura esatta dei tuoi action_key
-        action_name = str(Y[current_idx]) # Modo robusto per ottenere l'etichetta dell'azione
+        
+        action_name = str(Y[current_idx]) #Ricava l'etichetta dall'array Y all’indice corrente
         
         for kid_id, window_count in kid_dict.items():
             for i in range(window_count):
@@ -85,23 +86,23 @@ def selective_downsampling_by_padding(X, Y, kid_action_counts, toy_name, max_win
                 window_metadata.append({
                     'index': idx,
                     'kid_id': kid_id,
-                    'action_key': action_key, # Manteniamo la chiave originale per coerenza
+                    'action_key': action_key, # Mantengo chiave originale
                     'padding_count': count_padding_in_window(X[idx])
                 })
             current_idx += window_count
     
-    # 2. Raggruppamento delle finestre per bambino e azione
+    # Raggruppamento delle finestre per bambino e azione
     kid_action_groups = defaultdict(list)
     for metadata in window_metadata:
         key = (metadata['kid_id'], metadata['action_key'])
         kid_action_groups[key].append(metadata)
 
-    # 3. Logica di filtraggio
+    # Logica di filtraggio
     indices_to_keep = []
     
     for (kid_id, action_key), windows in kid_action_groups.items():
-        # Verifica se l'azione appartiene a un giocattolo da filtrare
-        # Questo controllo assume che il nome del giocattolo sia nell'action_key
+        # Decide se applicare il downsampling: vero se qualunque stringa in toys_to_downsample è un sottostringa di action_key
+        # (Esempio: se action_key="car_push" e toys_to_downsample=["car"] → True.)
         apply_downsampling = any(toy in action_key for toy in toys_to_downsample)
 
         if apply_downsampling and len(windows) > max_windows_per_kid_action:
@@ -122,15 +123,14 @@ def selective_downsampling_by_padding(X, Y, kid_action_counts, toy_name, max_win
             #      logger.info(f"Gruppo '{kid_id}-{action_key}': mantenute tutte le {len(windows)} finestre (giocattolo non target).")
 
 
-    # 4. Creazione dei nuovi array e del dizionario dei conteggi
+    # Creazione dei nuovi array e del dizionario dei conteggi
     indices_to_keep.sort()
     X_filtered = X[indices_to_keep]
     Y_filtered = Y[indices_to_keep]
 
-    # Ricostruisci kid_action_counts_filtered basandoti sui dati filtrati
+    # Ricostruisco kid_action_counts_filtered basandomi sui dati filtrati
     kid_action_counts_filtered = defaultdict(lambda: defaultdict(int))
-    # È necessario un modo per mappare gli indici filtrati a kid_id e action_key
-    # Riutilizziamo i metadati, ma solo per gli indici che abbiamo mantenuto
+    # È necessario un modo per mappare gli indici filtrati a kid_id e action_key: utilizzo i metadati, ma solo per gli indici che abbiamo mantenuto
     kept_metadata = [meta for meta in window_metadata if meta['index'] in indices_to_keep]
     for meta in kept_metadata:
         kid_action_counts_filtered[meta['action_key']][meta['kid_id']] += 1
@@ -462,8 +462,9 @@ def main(args):
     df_toy, toy_mapping = load_and_preprocess_data(args.toy, data_path)
     logger.info(f"Classi presenti dopo il filtraggio: {df_toy['action_id'].unique()}")
 
-    # --- Hold-out set per bambini specifici ---
-    df_train_val = df_toy.copy()
+    # --- Hold-out set per bambini specifici --- 
+    df_train_val = None
+    df_test_holdout = None
     if args.holdout_kids:
         logger.info(f"Separazione dei bambini per il test hold-out: {args.holdout_kids}")
         df_test_holdout = df_toy[df_toy['kid_id'].isin(args.holdout_kids)]
@@ -472,6 +473,7 @@ def main(args):
         logger.info(f"Dimensioni Hold-out Test set: {df_test_holdout.shape}")
     else:
         logger.info("Nessun hold-out set specificato: Esecuzione K-Fold su tutto il dataset.")
+        df_train_val = df_toy.copy()
 
     # --- Normalizzazione ---
     df_normalized = pd.DataFrame()
@@ -541,14 +543,25 @@ def main(args):
 )
 
     # =============================================================================
-    # STEP AGGIUNTO: APPLICAZIONE DEL DOWNSAMPLING SELETTIVO
+    #  APPLICAZIONE DEL DOWNSAMPLING SELETTIVO
     # =============================================================================
     logger.info("=== CONTROLLO ED ESECUZIONE DOWNSAMPLING SELETTIVO ===")
     
     # Definisci i giocattoli su cui applicare il downsampling
     TARGET_TOYS_FOR_DOWNSAMPLING = ['car', 'doll', 'elephant']
     MAX_WINDOWS_PER_KID_ACTION = 50
+    #  --- TEST PER VEDERE SE GLI INDICI COINCIDONO (da commentare una volta che ce ne siamo accertati) ---
+    current_idx = 0
+    for action_key, kid_dict in kid_action_counts.items():
+        for kid_id, window_count in kid_dict.items():
+            labels = Y[current_idx: current_idx + window_count]
+            
+            if not all(str(lab) in action_key for lab in labels):
+                print(f"Mismatch trovato per {action_key}-{kid_id}")
+            
+            current_idx += window_count
 
+    print("Controllo completato")
     # Applica la funzione solo se il giocattolo corrente è nella lista target
     # La funzione stessa si occuperà di tutto e aggiornerà le variabili X, Y e kid_action_counts
     X, Y, kid_action_counts = selective_downsampling_by_padding(
@@ -560,219 +573,593 @@ def main(args):
     # =============================================================================
 
     log_and_plot_distribution(
-    Y=Y, # Y qui è stato potenzialmente modificato dal downsampling
+    Y=Y, 
     title_prefix="Distribuzione Finale (Dopo il Downsampling)",
     toy_name=args.toy,
     toy_mapping=toy_mapping,
     save_dir=exp_figures_dir
 )
 
-    # Ora il codice continua con le variabili X e Y potenzialmente ridotte
+
     unique_labels = np.unique(Y)
     label_mapping = {label: i for i, label in enumerate(unique_labels)}
     Y_mapped = np.array([label_mapping[y] for y in Y])
-    
     num_classes = len(unique_labels)
     
-    unique_labels = np.unique(Y)
-    label_mapping = {label: i for i, label in enumerate(unique_labels)}
-    Y_mapped = np.array([label_mapping[y] for y in Y])
-    
-    num_classes = len(unique_labels)
     labels_dict = toy_mapping["encoded_to_name"]
-    class_names = [labels_dict.get(i, f"Unknown {i}") for i in unique_labels]
+
+    # Calcola i pesi in base alla frequenza inversa delle classi.
+    class_weights = compute_class_weight(
+        'balanced',
+        classes=np.unique(Y_mapped),
+        y=Y_mapped
+    )
+    # Converte i pesi in un tensore PyTorch, pronto per essere usato dalla loss.
+    class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32)
+    
+    logger.info(f"Pesi delle classi calcolati: {dict(zip(np.unique(Y_mapped), class_weights))}")
 
     logger.info(f"Dati di training/validation pronti: X.shape={X.shape}, num_classes={num_classes}")
-
-    skf = StratifiedKFold(n_splits=args.k_folds, shuffle=True, random_state=args.random_state)
-    all_fold_scores = []
-
-
-    
-    
-    
     pretrained_model_path = get_pretrained_model_path(args.pt_norm, args.pt_aug)
     logger.info(f"Utilizzo del modello pre-addestrato: {pretrained_model_path}")
 
-    # Dizionario per i risultati
-    fold_results = {
-        'fold': [], 'best_f1_score': [], 'best_params': [], 'test_f1_score': []
-    }
-
-    for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y_mapped)):
+    if args.holdout_kids:
+        logger.info("AVVIO PROCEDURA: K-Fold su Train/Val set + Valutazione finale su Hold-out")
         
-        # --- BLOCCO DI DEBUG DEGLI INDICI ---
-        logger.info(f"\n===== FOLD {fold + 1}/{args.k_folds} | DEBUG DELLO SPLIT =====")
-        logger.info(f"Train+Val indices totali: {len(train_val_idx)}")
-        logger.info(f"Test indices totali: {len(test_idx)}")
-        logger.debug(f"Primi 10 Train+Val indices: {train_val_idx[:10]}")
-        logger.debug(f"Primi 10 Test indices: {test_idx[:10]}")
-        
-        overlap = set(train_val_idx).intersection(set(test_idx))
-        if overlap: logger.error(f"ERRORE: SOVRAPPOSIZIONE TROVATA TRA TRAIN E TEST: {overlap}")
-        else: logger.info("Controllo sovrapposizione: OK. Nessuna sovrapposizione.")
-        
-        test_window_ids = [all_window_indices[i]['global_window_id'] for i in test_idx]
-        logger.info(f"Global IDs delle finestre nel set di test (primi 10): {test_window_ids[:10]}")
-       
-
-        X_train_val, X_test_fold = X[train_val_idx], X[test_idx]
-        Y_train_val, Y_test_fold = Y_mapped[train_val_idx], Y_mapped[test_idx]
-
-        train_val_indices_meta = [all_window_indices[i] for i in train_val_idx]
-        test_indices_meta = [all_window_indices[i] for i in test_idx]
-        train_val_consec = all_consecutivity[train_val_idx]
-        test_consec = all_consecutivity[test_idx]
-        
-        split_idx = int(0.8 * len(X_train_val))
-        X_train_fold, Y_train_fold = X_train_val[:split_idx], Y_train_val[:split_idx]
-        X_val_fold, Y_val_fold = X_train_val[split_idx:], Y_train_val[split_idx:]
-        
-        train_indices_meta = train_val_indices_meta[:split_idx]
-        val_indices_meta = train_val_indices_meta[split_idx:]
-        train_consec = train_val_consec[:split_idx]
-        val_consec = train_val_consec[split_idx:]
-        
-        if args.ft_aug == 'alltrs':
-            logger.info("Applicazione data augmentation al set di training del fold.")
-            transformation_function = generate_composite_transform_function_simple([
-                noise_transform_vectorized, scaling_transform_vectorized, negate_transform_vectorized,
-                time_flip_transform_vectorized, channel_shuffle_transform_vectorized,
-                time_warp_transform_improved, time_warp_transform_low_cost
-            ])
-            X_train_aug = transformation_function(X_train_fold)
-            X_train_fold = np.concatenate([X_train_fold, X_train_aug], axis=0)
-            Y_train_fold = np.concatenate([Y_train_fold, Y_train_fold.copy()], axis=0)
-
-        train_dataset = HARDataset(X_train_fold, Y_train_fold, train_indices_meta, train_consec)
-        val_dataset = HARDataset(X_val_fold, Y_val_fold, val_indices_meta, val_consec)
-        test_dataset = HARDataset(X_test_fold, Y_test_fold, test_indices_meta, test_consec)
+        skf = StratifiedKFold(n_splits=args.k_folds, shuffle=True, random_state=args.random_state)
+        all_fold_scores = []
 
 
-        def objective_fold(trial):
-            lr = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-            batch_size = trial.suggest_categorical('batch_size', [2, 4])
+        # Dizionario per i risultati
+        fold_results = {
+            'fold': [], 'best_f1_score': [], 'best_params': [], 'test_f1_score': []
+        }
+
+        
+
+        for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y_mapped)):
             
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+            # --- BLOCCO DI DEBUG DEGLI INDICI ---
+            logger.info(f"\n===== FOLD {fold + 1}/{args.k_folds} | DEBUG DELLO SPLIT =====")
+            logger.info(f"Train+Val indices totali: {len(train_val_idx)}")
+            logger.info(f"Test indices totali: {len(test_idx)}")
+            logger.debug(f"Primi 10 Train+Val indices: {train_val_idx[:10]}")
+            logger.debug(f"Primi 10 Test indices: {test_idx[:10]}")
             
-            model = DeepConvLSTM()
-            model.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
-            model = configure_model_for_tuning(model, args.tuning_strategy, num_classes)
-
-            # Non salviamo i risultati per i trial intermedi di Optuna
-            best_f1 = train_with_cm.train(model, train_loader, val_loader, 
-                                          epochs=args.epochs, batch_size=batch_size, lr=lr,
-                                          save_final_results=False)
-            return best_f1
-        # Ottimizzazione per questo fold
-        logger.info(f"Inizio ottimizzazione iperparametri per fold {fold + 1}")
-        study = optuna.create_study(direction='maximize', pruner=MedianPruner())
-        study.optimize(objective_fold, n_trials=args.n_trials)
-        
-        best_params_fold = study.best_params
-        best_f1_fold = study.best_value
-        logger.info(f"Migliori iperparametri per il fold {fold + 1}: {best_params_fold} (Val F1: {best_f1_fold:.4f})")
-
-        model_final_fold = DeepConvLSTM()
-        model_final_fold.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
-        model_final_fold = configure_model_for_tuning(model_final_fold, args.tuning_strategy, num_classes)
-        
-        train_loader_final = DataLoader(train_dataset, bbatch_size=best_params_fold['batch_size'], shuffle=True, drop_last=False)
-        val_loader_final = DataLoader(val_dataset, bbatch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
-        test_loader = DataLoader(test_dataset, bbatch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
-
-        logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
-        logger.info(f"Train dataset size: {len(train_dataset)}")
-        logger.info(f"Val dataset size: {len(val_dataset)}")
-        logger.info(f"Test dataset size: {len(test_dataset)}")
-
-        logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
-        logger.info(f"Train dataset size: {len(train_dataset)}")
-        logger.info(f"Val dataset size: {len(val_dataset)}")
-        logger.info(f"Test dataset size: {len(test_dataset)}")
+            overlap = set(train_val_idx).intersection(set(test_idx))
+            if overlap: logger.error(f"ERRORE: SOVRAPPOSIZIONE TROVATA TRA TRAIN E TEST: {overlap}")
+            else: logger.info("Controllo sovrapposizione: OK. Nessuna sovrapposizione.")
+            
+            test_window_ids = [all_window_indices[i]['global_window_id'] for i in test_idx]
+            logger.info(f"Global IDs delle finestre nel set di test (primi 10): {test_window_ids[:10]}")
         
 
-        # Conta quanti batch effettivi
-        train_batches = len(train_loader_final)
-        val_batches = len(val_loader_final)
-        test_batches = len(test_loader)
+            X_train_val, X_test_fold = X[train_val_idx], X[test_idx]
+            Y_train_val, Y_test_fold = Y_mapped[train_val_idx], Y_mapped[test_idx]
 
-        # CALCOLO CORRETTO delle finestre usate (con drop_last=False usa TUTTE)
-        train_samples_used = len(train_dataset)
-        val_samples_used = len(val_dataset)
-        test_samples_used = len(test_dataset)
+            train_val_indices_meta = [all_window_indices[i] for i in train_val_idx]
+            test_indices_meta = [all_window_indices[i] for i in test_idx]
+            train_val_consec = all_consecutivity[train_val_idx]
+            test_consec = all_consecutivity[test_idx]
+            
+            split_idx = int(0.8 * len(X_train_val))
+            X_train_fold, Y_train_fold = X_train_val[:split_idx], Y_train_val[:split_idx]
+            X_val_fold, Y_val_fold = X_train_val[split_idx:], Y_train_val[split_idx:]
+            
+            train_indices_meta = train_val_indices_meta[:split_idx]
+            val_indices_meta = train_val_indices_meta[split_idx:]
+            train_consec = train_val_consec[:split_idx]
+            val_consec = train_val_consec[split_idx:]
+            
+            if args.ft_aug == 'alltrs':
+                logger.info("Applicazione data augmentation al set di training del fold.")
+                transformation_function = generate_composite_transform_function_simple([
+                    noise_transform_vectorized, scaling_transform_vectorized, negate_transform_vectorized,
+                    time_flip_transform_vectorized, channel_shuffle_transform_vectorized,
+                    time_warp_transform_improved, time_warp_transform_low_cost
+                ])
+                X_train_aug = transformation_function(X_train_fold)
+                X_train_fold = np.concatenate([X_train_fold, X_train_aug], axis=0)
+                Y_train_fold = np.concatenate([Y_train_fold, Y_train_fold.copy()], axis=0)
 
-        logger.info(f"Train batches: {train_batches} (finestre usate: {train_samples_used}/{len(train_dataset)})")
-        logger.info(f"Val batches: {val_batches} (finestre usate: {val_samples_used}/{len(val_dataset)})")
-        logger.info(f"Test batches: {test_batches} (finestre usate: {test_samples_used}/{len(test_dataset)})")
+            train_dataset = HARDataset(X_train_fold, Y_train_fold, train_indices_meta, train_consec)
+            val_dataset = HARDataset(X_val_fold, Y_val_fold, val_indices_meta, val_consec)
+            test_dataset = HARDataset(X_test_fold, Y_test_fold, test_indices_meta, test_consec)
 
-        logger.info("Inizio training finale per il fold con i migliori iperparametri...")
-        train_with_cm.train(
-            model_final_fold, train_loader_final, val_loader_final,
-            epochs=args.epochs, 
-            batch_size=best_params_fold['batch_size'], 
-            lr=best_params_fold['lr'],
-            figure_name=f"kfold_training_fold_{fold+1}_{exp_name}",
-            save_final_results=True, # Salviamo i grafici di training/val del fold
-            is_best_trial=True,      # Indica che questo è il training "reale" del fold
-            figures_dir=exp_figures_dir, 
-            reports_dir=exp_reports_dir
-        )
-        # --- BLOCCO DI DEBUG PRE-VALUTAZIONE ---
-        logger.info(f"\n=== PRE-EVALUATE DEBUG (Fold {fold+1}) ===")
-        logger.info(f"Test dataset size prima di evaluate: {len(test_dataset)}")
-        logger.info(f"Test loader size prima di evaluate: {len(test_loader)}")
-        if len(test_loader) > 0:
-            for i, batch in enumerate(test_loader):
-                if i == 0:
-                    inputs, targets, indices, _ = batch
-                    logger.info(f"Primo batch di test - inputs shape: {inputs.shape}")
-                    logger.info(f"Primo batch di test - targets shape: {targets.shape}")
-                    logger.info(f"Primo batch di test - indices: {indices}")
-                    break
 
+            def objective_fold(trial):
+                lr = trial.suggest_categorical('lr', [1e-5, 1e-4, 1e-3])
+                batch_size = trial.suggest_categorical('batch_size', [2, 4])
+                loss_type = trial.suggest_categorical('loss_type', [
+                    'focal', 'label_smoothing', 'weighted_ce', 'combined'
+                ])
+                criterion = None
+                if loss_type == 'focal':
+                    # Per FocalLoss, suggerisce un valore per gamma.
+                    gamma = trial.suggest_categorical('gamma', [1.0, 2.0, 3.0])
+                    # (Assicurati che FocalLoss sia importata correttamente)
+                    criterion = FocalLoss(gamma=gamma, num_classes=num_classes, task_type='multi-class')
+                    
+                elif loss_type == 'label_smoothing':
+                    # Per LabelSmoothing, suggerisce un valore di smoothing.
+                    smoothing = trial.suggest_categorical('smoothing', [0.05, 0.1, 0.15, 0.2])
+                    # (Assicurati che LabelSmoothingCrossEntropy sia importata)
+                    criterion = LabelSmoothingCrossEntropy(epsilon=smoothing)
+                    
+                elif loss_type == 'combined':
+                    # Per la loss combinata, suggerisce i parametri specifici.
+                    gamma = trial.suggest_categorical('gamma_combined', [1.0, 2.0]) # Nome diverso per evitare conflitti
+                    focal_weight = trial.suggest_categorical('focal_weight', [0.3, 0.5, 0.7])
+                    criterion = CombinedLoss(
+                        focal_weight=focal_weight,
+                        ce_weight=1.0 - focal_weight,
+                        gamma=gamma,
+                        class_weights=class_weights_tensor, # Usa i pesi calcolati prima
+                        num_classes=num_classes
+                    )
+                else:  # 'weighted_ce'
+                    # Per la Cross Entropy pesata, usa i pesi calcolati prima.
+                    criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+                train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+                val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
                 
-        _, _, test_f1_fold = train_with_cm.evaluate_model(
-            model_final_fold, test_loader, 
-            figure_name=f"cm_test_fold_{fold + 1}_{exp_name}",
-            save_confusion_matrix=True, 
+                model = DeepConvLSTM()
+                model.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
+                model = configure_model_for_tuning(model, args.tuning_strategy, num_classes)
+                logger.info(f"TRIAL {trial.number}: lr={lr}, batch={batch_size}, loss={loss_type}")
+                best_f1 = train_with_cm.train( net=model, 
+                    train_loader=train_loader, 
+                    val_loader=val_loader,
+                    exp_figures_dir=exp_figures_dir,
+                    exp_reports_dir=exp_reports_dir,
+                    epochs=args.epochs, 
+                    lr=lr,
+                    criterion=criterion,
+                    save_plots=False 
+                )
+                return best_f1
+            # Ottimizzazione per questo fold
+            logger.info(f"Inizio ottimizzazione iperparametri per fold {fold + 1}")
+            study = optuna.create_study(direction='maximize', pruner=MedianPruner())
+            study.optimize(objective_fold, n_trials=args.n_trials)
+            
+            best_params_fold = study.best_params
+            best_f1_fold = study.best_value
+            logger.info(f"Migliori iperparametri per il fold {fold + 1}: {best_params_fold} (Val F1: {best_f1_fold:.4f})")
+
+            model_final_fold = DeepConvLSTM()
+            model_final_fold.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
+            model_final_fold = configure_model_for_tuning(model_final_fold, args.tuning_strategy, num_classes)
+            
+            train_loader_final = DataLoader(train_dataset, batch_size=best_params_fold['batch_size'], shuffle=True, drop_last=False)
+            val_loader_final = DataLoader(val_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
+            test_loader = DataLoader(test_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
+
+            logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
+            logger.info(f"Train dataset size: {len(train_dataset)}")
+            logger.info(f"Val dataset size: {len(val_dataset)}")
+            logger.info(f"Test dataset size: {len(test_dataset)}")
+
+            logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
+            logger.info(f"Train dataset size: {len(train_dataset)}")
+            logger.info(f"Val dataset size: {len(val_dataset)}")
+            logger.info(f"Test dataset size: {len(test_dataset)}")
+            
+
+            # Conta quanti batch effettivi
+            train_batches = len(train_loader_final)
+            val_batches = len(val_loader_final)
+            test_batches = len(test_loader)
+
+            # CALCOLO CORRETTO delle finestre usate (con drop_last=False usa TUTTE)
+            train_samples_used = len(train_dataset)
+            val_samples_used = len(val_dataset)
+            test_samples_used = len(test_dataset)
+
+            logger.info(f"Train batches: {train_batches} (finestre usate: {train_samples_used}/{len(train_dataset)})")
+            logger.info(f"Val batches: {val_batches} (finestre usate: {val_samples_used}/{len(val_dataset)})")
+            logger.info(f"Test batches: {test_batches} (finestre usate: {test_samples_used}/{len(test_dataset)})")
+
+            logger.info("Inizio training finale per il fold con i migliori iperparametri...")
+            train_with_cm.train(net=model_final_fold, 
+                train_loader=train_loader_final, 
+                val_loader=val_loader_final,
+                exp_figures_dir=exp_figures_dir,
+                exp_reports_dir=exp_reports_dir,
+                epochs=args.epochs, 
+                lr=best_params_fold['lr'],
+                figure_name=f"training_fold_{fold+1}", 
+                save_plots=True
+            )
+
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+            # --- BLOCCO DI DEBUG PRE-VALUTAZIONE ---
+            logger.info(f"\n=== PRE-EVALUATE DEBUG (Fold {fold+1}) ===")
+            logger.info(f"Test dataset size prima di evaluate: {len(test_dataset)}")
+            logger.info(f"Test loader size prima di evaluate: {len(test_loader)}")
+            if len(test_loader) > 0:
+                for i, batch in enumerate(test_loader):
+                    if i == 0:
+                        inputs, targets, indices, _ = batch
+                        logger.info(f"Primo batch di test - inputs shape: {inputs.shape}")
+                        logger.info(f"Primo batch di test - targets shape: {targets.shape}")
+                        logger.info(f"Primo batch di test - indices: {indices}")
+                        break
+
+                    
+            _, _, test_f1_fold = train_with_cm.evaluate_model(
+                model_final_fold, test_loader, 
+                figure_name=f"cm_test_fold_{fold + 1}_{exp_name}",
+                save_confusion_matrix=True, 
+                save_predictions_csv=True,
+                save_f1_score=True,
+                labels_dict=labels_dict,
+                figures_dir=exp_figures_dir, # Specifica dove salvare i file
+                reports_dir=exp_reports_dir  # Specifica dove salvare i report
+            )
+
+            model_path_fold = os.path.join(exp_models_dir, f"best_model_fold_{fold + 1}.pkl")
+            torch.save(model_final_fold.state_dict(), model_path_fold)
+
+            fold_results['fold'].append(fold + 1)
+            fold_results['best_f1_score'].append(best_f1_fold)
+            fold_results['best_params'].append(best_params_fold)
+            fold_results['test_f1_score'].append(test_f1_fold)
+            
+            all_fold_scores.append({
+                'fold': fold + 1, 'params': best_params_fold, 'val_f1': best_f1_fold,
+                'test_f1': test_f1_fold, 'model_path': model_path_fold
+            })
+            
+            logger.info(f"Fold {fold + 1} completato - Test F1: {test_f1_fold:.4f}")
+
+        logger.info("\n===== FASE FINALE: Training su tutto Train/Val e Valutazione su Hold-out =====")
+        logger.info("Identificazione dei migliori iperparametri globali...")
+        best_fold = max(all_fold_scores, key=lambda x: x['val_f1'])
+        best_hyperparameters = best_fold['params']
+        logger.info(f"Migliori iperparametri trovati (dal Fold {best_fold['fold']}): {best_hyperparameters}")
+
+        logger.info("Addestramento del modello finale su tutto il set di train/validazione...")
+        full_train_val_dataset = HARDataset(X, Y_mapped, all_window_indices, all_consecutivity)
+        final_train_loader = DataLoader(full_train_val_dataset, batch_size=best_hyperparameters['batch_size'], shuffle=True)
+
+        final_model = DeepConvLSTM()
+        final_model.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
+        final_model = configure_model_for_tuning(final_model, args.tuning_strategy, num_classes)
+
+        #addestro modello finale
+        train_with_cm.train(net=final_model, 
+            train_loader=final_train_loader, 
+            val_loader=None, 
+            exp_figures_dir=exp_figures_dir,
+            exp_reports_dir=exp_reports_dir,
+            epochs=args.epochs, 
+            lr=best_hyperparameters['lr'],
+            figure_name="final_training_on_all_train_val_data",
+            save_plots=False
+        )
+
+        # Salvo il modello finale addestrato, che è ora pronto per la valutazione.
+        final_model_path = os.path.join(exp_models_dir, "final_model.pkl")
+        torch.save(final_model.state_dict(), final_model_path)
+        logger.info(f"Modello finale salvato in: {final_model_path}")
+
+
+        logger.info("Preparazione del hold-out test set per la valutazione finale...")
+
+        # Il DataFrame df_test_holdout_normalized è già stato normalizzato correttamente all'inizio.
+        # Ora applichiamo la sliding window su di esso.
+        X_test_list, Y_test_list = [], []
+        temp_action_dir_test = os.path.join(data_path, "temp_actions_test")
+        os.makedirs(temp_action_dir_test, exist_ok=True)
+
+        logger.info("Applicazione Sliding Window sul set di hold-out test...")
+        for action_id in df_test_holdout_normalized['action_id'].unique():
+            df_action_test = df_test_holdout_normalized[df_test_holdout_normalized['action_id'] == action_id]
+            temp_path_test = os.path.join(temp_action_dir_test, f'df_test_{args.toy}_action_{action_id}.csv')
+            df_action_test.to_csv(temp_path_test, index=False)
+            
+            # Chiamiamo la stessa funzione di sliding window
+            X_w_test, Y_w_test, _, _, _ = sliding_window_on_data.process_csv(temp_path_test, 9, 100, 50)
+            
+            X_test_list.append(X_w_test)
+            Y_test_list.append(Y_w_test)
+            
+        shutil.rmtree(temp_action_dir_test) # Pulisce la cartella temporanea
+        
+        # Concatena i risultati per creare gli array finali del test set.
+        X_test_final = np.concatenate(X_test_list, axis=0)
+        Y_test_final = np.concatenate(Y_test_list, axis=0).flatten()
+        logger.info(f"Dati di test finali pronti: X_test_final.shape={X_test_final.shape}")
+
+        # Applica lo STESSO remapping di etichette usato per il training.
+        # È FONDAMENTALE usare lo stesso `label_mapping` per garantire coerenza.
+        Y_test_final_mapped = np.array([label_mapping[y] for y in Y_test_final])
+
+        # Crea il DataLoader per il test finale.
+        test_dataset_final = HARDataset(X_test_final, Y_test_final_mapped)
+        test_loader_final = DataLoader(test_dataset_final, batch_size=best_hyperparameters['batch_size'])
+
+        logger.info("Valutazione finale del modello sul hold-out test set...")
+        train_with_cm.evaluate_model(
+            net=final_model, 
+            test_loader=test_loader_final,
+            exp_figures_dir=exp_figures_dir,
+            exp_reports_dir=exp_reports_dir,
+            figure_name="FINAL_holdout_evaluation",
+            save_confusion_matrix=True,
             save_predictions_csv=True,
             save_f1_score=True,
-            labels_dict=labels_dict,
-            figures_dir=exp_figures_dir, # Specifica dove salvare i file
-            reports_dir=exp_reports_dir  # Specifica dove salvare i report
+            labels_dict=labels_dict
+        )
+    else:
+        logger.info("AVVIO PROCEDURA: K-Fold su tutti i dati per trovare HP + Training/Valutazione finale")
+
+        logger.info("\n--- Fase 1: Esecuzione K-Fold per trovare i migliori iperparametri e performance media ---")
+        # Inizializza StratifiedKFold.
+        skf = StratifiedKFold(n_splits=args.k_folds, shuffle=True, random_state=args.random_state)
+        
+        # Lista per conservare i risultati dettagliati di ogni fold.
+        all_fold_scores = []
+
+
+        # Dizionario per i risultati
+        fold_results = {
+            'fold': [], 'best_f1_score': [], 'best_params': [], 'test_f1_score': []
+        }
+
+        
+
+        for fold, (train_val_idx, test_idx) in enumerate(skf.split(X, Y_mapped)):
+            
+            # --- BLOCCO DI DEBUG DEGLI INDICI ---
+            logger.info(f"\n===== FOLD {fold + 1}/{args.k_folds} | DEBUG DELLO SPLIT =====")
+            logger.info(f"Train+Val indices totali: {len(train_val_idx)}")
+            logger.info(f"Test indices totali: {len(test_idx)}")
+            logger.debug(f"Primi 10 Train+Val indices: {train_val_idx[:10]}")
+            logger.debug(f"Primi 10 Test indices: {test_idx[:10]}")
+            
+            overlap = set(train_val_idx).intersection(set(test_idx))
+            if overlap: logger.error(f"ERRORE: SOVRAPPOSIZIONE TROVATA TRA TRAIN E TEST: {overlap}")
+            else: logger.info("Controllo sovrapposizione: OK. Nessuna sovrapposizione.")
+            
+            test_window_ids = [all_window_indices[i]['global_window_id'] for i in test_idx]
+            logger.info(f"Global IDs delle finestre nel set di test (primi 10): {test_window_ids[:10]}")
+        
+
+            X_train_val, X_test_fold = X[train_val_idx], X[test_idx]
+            Y_train_val, Y_test_fold = Y_mapped[train_val_idx], Y_mapped[test_idx]
+
+            train_val_indices_meta = [all_window_indices[i] for i in train_val_idx]
+            test_indices_meta = [all_window_indices[i] for i in test_idx]
+            train_val_consec = all_consecutivity[train_val_idx]
+            test_consec = all_consecutivity[test_idx]
+            
+            split_idx = int(0.8 * len(X_train_val))
+            X_train_fold, Y_train_fold = X_train_val[:split_idx], Y_train_val[:split_idx]
+            X_val_fold, Y_val_fold = X_train_val[split_idx:], Y_train_val[split_idx:]
+            
+            train_indices_meta = train_val_indices_meta[:split_idx]
+            val_indices_meta = train_val_indices_meta[split_idx:]
+            train_consec = train_val_consec[:split_idx]
+            val_consec = train_val_consec[split_idx:]
+            
+            if args.ft_aug == 'alltrs':
+                logger.info("Applicazione data augmentation al set di training del fold.")
+                transformation_function = generate_composite_transform_function_simple([
+                    noise_transform_vectorized, scaling_transform_vectorized, negate_transform_vectorized,
+                    time_flip_transform_vectorized, channel_shuffle_transform_vectorized,
+                    time_warp_transform_improved, time_warp_transform_low_cost
+                ])
+                X_train_aug = transformation_function(X_train_fold)
+                X_train_fold = np.concatenate([X_train_fold, X_train_aug], axis=0)
+                Y_train_fold = np.concatenate([Y_train_fold, Y_train_fold.copy()], axis=0)
+
+            train_dataset = HARDataset(X_train_fold, Y_train_fold, train_indices_meta, train_consec)
+            val_dataset = HARDataset(X_val_fold, Y_val_fold, val_indices_meta, val_consec)
+            test_dataset = HARDataset(X_test_fold, Y_test_fold, test_indices_meta, test_consec)
+
+            logger.info(f"--- Inizio ottimizzazione iperparametri per il Fold {fold + 1} ---")
+            def objective_fold(trial):
+                lr = trial.suggest_categorical('lr', [1e-5, 1e-4, 1e-3])
+                batch_size = trial.suggest_categorical('batch_size', [2, 4])
+                loss_type = trial.suggest_categorical('loss_type', [
+                    'focal', 'label_smoothing', 'weighted_ce', 'combined'
+                ])
+                criterion = None
+                if loss_type == 'focal':
+                    # Per FocalLoss, suggerisce un valore per gamma.
+                    gamma = trial.suggest_categorical('gamma', [1.0, 2.0, 3.0])
+                    # (Assicurati che FocalLoss sia importata correttamente)
+                    criterion = FocalLoss(gamma=gamma, num_classes=num_classes, task_type='multi-class')
+                elif loss_type == 'label_smoothing':
+                    # Per LabelSmoothing, suggerisce un valore di smoothing.
+                    smoothing = trial.suggest_categorical('smoothing', [0.05, 0.1, 0.15, 0.2])
+                    # (Assicurati che LabelSmoothingCrossEntropy sia importata)
+                    criterion = LabelSmoothingCrossEntropy(epsilon=smoothing)
+                    
+                elif loss_type == 'combined':
+                    # Per la loss combinata, suggerisce i parametri specifici.
+                    gamma = trial.suggest_categorical('gamma_combined', [1.0, 2.0]) # Nome diverso per evitare conflitti
+                    focal_weight = trial.suggest_categorical('focal_weight', [0.3, 0.5, 0.7])
+                    criterion = CombinedLoss(
+                        focal_weight=focal_weight,
+                        ce_weight=1.0 - focal_weight,
+                        gamma=gamma,
+                        class_weights=class_weights_tensor, # Usa i pesi calcolati prima
+                        num_classes=num_classes
+                    )
+                else:  # 'weighted_ce'
+                    # Per la Cross Entropy pesata, usa i pesi calcolati prima.
+                    criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+                
+                train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+                val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+                
+                model = DeepConvLSTM()
+                model.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
+                model = configure_model_for_tuning(model, args.tuning_strategy, num_classes)
+                logger.info(f"TRIAL {trial.number}: lr={lr}, batch={batch_size}, loss={loss_type}")
+                # Non salviamo i risultati per i trial intermedi di Optuna
+                best_f1 = train_with_cm.train( net=model, 
+                    train_loader=train_loader, 
+                    val_loader=val_loader,
+                    exp_figures_dir=exp_figures_dir,
+                    exp_reports_dir=exp_reports_dir,
+                    epochs=args.epochs, 
+                    lr=lr,
+                    criterion=criterion,
+                    save_plots=False 
+                )
+                return best_f1
+            # Ottimizzazione per questo fold
+            logger.info(f"Inizio ottimizzazione iperparametri per fold {fold + 1}")
+            study = optuna.create_study(direction='maximize', pruner=MedianPruner())
+            study.optimize(objective_fold, n_trials=args.n_trials)
+            
+            best_params_fold = study.best_params
+            best_f1_fold = study.best_value
+            logger.info(f"Migliori iperparametri per il fold {fold + 1}: {best_params_fold} (Val F1: {best_f1_fold:.4f})")
+
+            model_final_fold = DeepConvLSTM()
+            model_final_fold.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
+            model_final_fold = configure_model_for_tuning(model_final_fold, args.tuning_strategy, num_classes)
+
+            logger.info(f"--- Addestramento e valutazione del modello finale per il Fold {fold + 1} ---")
+            train_loader_final = DataLoader(train_dataset, batch_size=best_params_fold['batch_size'], shuffle=True, drop_last=False)
+            val_loader_final = DataLoader(val_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
+            test_loader = DataLoader(test_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
+
+            logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
+            logger.info(f"Train dataset size: {len(train_dataset)}")
+            logger.info(f"Val dataset size: {len(val_dataset)}")
+            logger.info(f"Test dataset size: {len(test_dataset)}")
+
+            logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
+            logger.info(f"Train dataset size: {len(train_dataset)}")
+            logger.info(f"Val dataset size: {len(val_dataset)}")
+            logger.info(f"Test dataset size: {len(test_dataset)}")
+            
+
+            # Conta quanti batch effettivi
+            train_batches = len(train_loader_final)
+            val_batches = len(val_loader_final)
+            test_batches = len(test_loader)
+
+            # CALCOLO CORRETTO delle finestre usate (con drop_last=False usa TUTTE)
+            train_samples_used = len(train_dataset)
+            val_samples_used = len(val_dataset)
+            test_samples_used = len(test_dataset)
+
+            logger.info(f"Train batches: {train_batches} (finestre usate: {train_samples_used}/{len(train_dataset)})")
+            logger.info(f"Val batches: {val_batches} (finestre usate: {val_samples_used}/{len(val_dataset)})")
+            logger.info(f"Test batches: {test_batches} (finestre usate: {test_samples_used}/{len(test_dataset)})")
+
+            logger.info("Inizio training finale per il fold con i migliori iperparametri...")
+
+            train_with_cm.train(net=model_final_fold, 
+                train_loader=train_loader_final, 
+                val_loader=val_loader_final,
+                exp_figures_dir=exp_figures_dir,
+                exp_reports_dir=exp_reports_dir,
+                epochs=args.epochs, 
+                lr=best_params_fold['lr'],
+                figure_name=f"kfold_training_fold_{fold+1}_{exp_name}", 
+                save_plots=True
+            )
+
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            # --- BLOCCO DI DEBUG PRE-VALUTAZIONE ---
+            logger.info(f"\n=== PRE-EVALUATE DEBUG (Fold {fold+1}) ===")
+            logger.info(f"Test dataset size prima di evaluate: {len(test_dataset)}")
+            logger.info(f"Test loader size prima di evaluate: {len(test_loader)}")
+            if len(test_loader) > 0:
+                for i, batch in enumerate(test_loader):
+                    if i == 0:
+                        inputs, targets, indices, _ = batch
+                        logger.info(f"Primo batch di test - inputs shape: {inputs.shape}")
+                        logger.info(f"Primo batch di test - targets shape: {targets.shape}")
+                        logger.info(f"Primo batch di test - indices: {indices}")
+                        break
+
+            logger.info(f"Valutazione del modello del Fold {fold + 1} sul suo test set...")
+            _, _, test_f1_fold = train_with_cm.evaluate_model(
+                net=model_final_fold, 
+                test_loader=test_loader,
+                exp_figures_dir=exp_figures_dir,
+                exp_reports_dir=exp_reports_dir,
+                figure_name=f"TEST_fold_{fold + 1}", # Nome file base per salvare CM e predizioni
+                save_confusion_matrix=True,
+                save_predictions_csv=True,
+                save_f1_score=True,
+                labels_dict=labels_dict
+            )
+
+            # Salva il modello del fold.
+            model_path_fold = os.path.join(exp_models_dir, f"model_fold_{fold + 1}.pkl")
+            torch.save(model_final_fold.state_dict(), model_path_fold)
+
+            fold_results['fold'].append(fold + 1)
+            fold_results['best_f1_score'].append(best_f1_fold)
+            fold_results['best_params'].append(best_params_fold)
+            fold_results['test_f1_score'].append(test_f1_fold)
+            
+            all_fold_scores.append({
+                'fold': fold + 1, 'params': best_params_fold, 'val_f1': best_f1_fold,
+                'test_f1': test_f1_fold, 'model_path': model_path_fold
+            })
+            
+            logger.info(f"Fold {fold + 1} completato - Test F1: {test_f1_fold:.4f}")
+
+        logger.info("Aggregazione delle matrici di confusione di tutti i fold...")
+        combine_kfold_confusion_matrices(
+            exp_reports_dir=exp_reports_dir,
+            num_folds=args.k_folds,
+            class_names=[labels_dict.get(i) for i in range(num_classes)],
+            exp_figures_dir=exp_figures_dir
         )
 
-        model_path_fold = os.path.join(exp_models_dir, f"best_model_fold_{fold + 1}.pkl")
-        torch.save(model_final_fold.state_dict(), model_path_fold)
+        # 2.2 Identifica i migliori iperparametri globali
+        logger.info("Identificazione dei migliori iperparametri globali...")
+        best_fold = max(all_fold_scores, key=lambda x: x['val_f1'])
+        best_hyperparameters = best_fold['params']
+        logger.info(f"Migliori iperparametri globali scelti (dal Fold {best_fold['fold']}): {best_hyperparameters}")
 
-        fold_results['fold'].append(fold + 1)
-        fold_results['best_f1_score'].append(best_f1_fold)
-        fold_results['best_params'].append(best_params_fold)
-        fold_results['test_f1_score'].append(test_f1_fold)
+        # 2.3 Addestra un modello finale su TUTTI i dati (X e Y)
+        logger.info("Addestramento del modello finale su tutti i dati disponibili...")
+        final_dataset = HARDataset(X, Y_mapped, all_window_indices, all_consecutivity)
+        final_train_loader = DataLoader(final_dataset, batch_size=best_hyperparameters['batch_size'], shuffle=True)
         
-        all_fold_scores.append({
-            'fold': fold + 1, 'params': best_params_fold, 'val_f1': best_f1_fold,
-            'test_f1': test_f1_fold, 'model_path': model_path_fold
-        })
+        final_model = DeepConvLSTM()
+        final_model.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
+        final_model = configure_model_for_tuning(final_model, args.tuning_strategy, num_classes)
         
-        logger.info(f"Fold {fold + 1} completato - Test F1: {test_f1_fold:.4f}")
+        
+        #addestro modello finale
+        train_with_cm.train(net=final_model, 
+            train_loader=final_train_loader, 
+            val_loader=None, 
+            exp_figures_dir=exp_figures_dir,
+            exp_reports_dir=exp_reports_dir,
+            epochs=args.epochs, 
+            lr=best_hyperparameters['lr'],
+            figure_name="final_training_all_data",
+            save_plots=False
+        )
 
-    logger.info("\n===== RISULTATI K-FOLD CROSS-VALIDATION =====")
-    test_f1_scores = [res['test_f1'] for res in all_fold_scores]
-    mean_f1 = np.mean(test_f1_scores)
-    std_f1 = np.std(test_f1_scores)
-    
-    logger.info(f"F1-score medio sui test fold: {mean_f1:.4f} ± {std_f1:.4f}")
-    
-    best_fold = max(all_fold_scores, key=lambda x: x['val_f1'])
-    logger.info(f"Miglior fold (basato su val F1): Fold {best_fold['fold']}")
-    logger.info(f"  -> Iperparametri: {best_fold['params']}")
-    logger.info(f"  -> Val F1: {best_fold['val_f1']:.4f}, Test F1: {best_fold['test_f1']:.4f}")
+        
+        # Salva il modello finale.
+        final_model_path = os.path.join(exp_models_dir, "final_model.pkl")
+        torch.save(final_model.state_dict(), final_model_path)
+        logger.info(f"Modello finale salvato in: {final_model_path}")
 
-    results_df = pd.DataFrame(all_fold_scores)
-    results_df.to_csv(os.path.join(REPORTS_DIR, f'kfold_results_{exp_name}.csv'), index=False)
+
+        
+
+
 
 if __name__ == "__main__":
     args = parse_args()

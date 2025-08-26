@@ -8,70 +8,52 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from torch.utils.data import DataLoader
 from sklearn.metrics import confusion_matrix
-from utils.log_config import logger
 from glob import glob
 from sklearn.metrics import classification_report
-
-
-
 from collections import Counter
-
-
-
-
-
 import matplotlib.patches as mpatches
 
 
-
-from app_config import FIGURES_DIR, REPORTS_DIR
+from utils.log_config import logger
 from models.DeepConvLSTM import DeepConvLSTM, HARDataset
 
+# Configurazione dei parametri di stile per i grafici
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['Times New Roman', 'DejaVu Serif']
+plt.rcParams['font.size'] = 12
+plt.rcParams['axes.linewidth'] = 0.8
+plt.rcParams['grid.linewidth'] = 0.5
+plt.rcParams['grid.alpha'] = 0.3
+def plot_CM(model, dataloader, device, figure_name: str, labels_dict: dict, 
+                    exp_figures_dir: str, exp_reports_dir: str):
+    """
+    Funzione che accetta modello e un dataloader già pronti.
+    Salva i risultati (matrice, F1, predizioni) nelle cartelle specifiche dell'esperimento.
 
-def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
-: np.ndarray, batch_size: int, figure_name: str, labels_dict: dict = None, figures_dir=FIGURES_DIR, reports_dir=REPORTS_DIR):
-    """
-    Mostra e salva la matrice di confusione per il modello e il dataset forniti.
-    Inoltre salva le predizioni e le etichette reali in un file CSV.
- 
     Parametri:
-        mdl_class: La classe del modello (non un'istanza).
-        mdl_weights (str): Percorso ai pesi del modello (file .pt).
-        X (np.ndarray): Caratteristiche in input.
-        Y (np.ndarray): Etichette reali (ground truth).
-        batch_size (int): Dimensione del batch da usare nel DataLoader.
-        figure_name (str): Nome del file della figura da salvare.
-        labels_dict (dict, opzionale): Mappatura degli indici delle etichette ai nomi delle classi.
+        model (torch.nn.Module): Il modello PyTorch GIÀ addestrato e pronto.
+        dataloader (DataLoader): Il DataLoader contenente i dati da valutare.
+        device (torch.device): Il device su cui eseguire il modello (es. "cuda" o "cpu").
+        figure_name (str): Nome base per i file di output (es. "cm_train_fold_1").
+        labels_dict (dict): Mappatura degli indici delle etichette ai nomi delle classi.
+        exp_figures_dir (str): Percorso alla cartella delle figure per l'esperimento corrente.
+        exp_reports_dir (str): Percorso alla cartella dei report per l'esperimento corrente.
     """
+    logger.info(f"--- Avvio valutazione e plotting per: {figure_name} ---")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
  
     try:
-        # Carico il modello e i pesi
-        n_classes = len(np.unique(Y)) #calcolo numero di classi andando a vedere le etichette uniche in y (etichette vere)
-        logger.debug(f"Number of classes: {n_classes}")
-        model = mdl_class(n_classes=n_classes, nb_sensor_channels=9, sliding_window_length=100)
-        # Carico i psi NEL modello, non sull'OrderedDict
-        state_dict = torch.load(mdl_weights, map_location=device)
-        model.load_state_dict(state_dict, strict=False)  # strict=False per sicurezza
-        # Sposto il MODELLO sul device, non lo state_dict
+        # Il modello viene passato già pronto e messo in modalità valutazione
         model.to(device)
-        model.eval() # Imposto il modello in modalità di valutazione e quindi non calcolo i gradienti e disabilito il dropout
-        
-        logger.info(f"Loaded complete model from {mdl_weights}")
+        model.eval()
       
-       
-
- 
-        # Dataset e DataLoader
-        dataset = HARDataset(X, Y)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
- 
+        # Dataset e DataLoader gia pronti 
         # Predizioni
         all_preds = [] #per memorizzare le predizioni
         all_labels = [] #per memorizzare le etichette vere
  
         with torch.no_grad():
-            for data, labels in dataloader:
+            for data, labels, _, _ in dataloader:
                 # Verifico che data e labels siano tensori PyTorch
                 if not isinstance(data, torch.Tensor):
                     data = torch.tensor(data)
@@ -79,10 +61,11 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
                     labels = torch.tensor(labels)
                
                 data = data.to(device)
+                batch_size = data.size(0)
                 # Le etichette possono rimanere su CPU poiché non partecipano al calcolo del forward
                 batch_len = len(data)
-                hidden = model.init_hidden(batch_size=batch_len)  # Inizializzo lo stato nascosto per il batch corrente
-                outputs = model(data, hidden, batch_len)
+                hidden = model.init_hidden(batch_size=batch_size)  # Inizializzo lo stato nascosto per il batch corrente
+                outputs, _ = model(data, hidden, batch_size)
                 if isinstance(outputs, tuple):
                     outputs = outputs[0]
                 _, preds = torch.max(outputs, 1)  # Ottengo le predizioni massime (classi) per ogni campione nel batch  
@@ -94,37 +77,28 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
  
         # Calcolo dell'F1-score
         f1_scores = {
-            'macro': f1_score(all_labels, all_preds, average='macro'),
-            'micro': f1_score(all_labels, all_preds, average='micro'),
-            'weighted': f1_score(all_labels, all_preds, average='weighted')
+            'macro': f1_score(all_labels, all_preds, average='macro', zero_division=0),
+            'micro': f1_score(all_labels, all_preds, average='micro', zero_division=0),
+            'weighted': f1_score(all_labels, all_preds, average='weighted', zero_division=0)
         }
- 
-        # Per classe
-        f1_per_class = f1_score(all_labels, all_preds, average=None)
+        f1_per_class = f1_score(all_labels, all_preds, average=None, zero_division=0)
  
         # Salvataggio delle predizioni in un file CSV
-        os.makedirs(reports_dir, exist_ok=True)  # Assicura che la directory per i risultati esista
-        predictions_file = os.path.join(reports_dir, f"{figure_name}_predictions.csv")
-       
-        # Creo un DataFrame con le etichette vere e le predizioni
-        predictions_df = pd.DataFrame({
-            'true_label': all_labels,
-            'predicted_label': all_preds
-        })
+        os.makedirs(exp_reports_dir, exist_ok=True)  # Assicura che la directory per i risultati esista
+        predictions_file = os.path.join(exp_reports_dir, f"{figure_name}_predictions.csv")
+        predictions_df = pd.DataFrame({'true_label': all_labels, 'predicted_label': all_preds})
        
         # Se abbiamo un dizionario delle etichette, aggiungiamo anche i nomi delle classi
         if labels_dict:
             predictions_df['true_class'] = predictions_df['true_label'].map(labels_dict)
             predictions_df['predicted_class'] = predictions_df['predicted_label'].map(labels_dict)
-       
-        # Salvo il file CSV
         predictions_df.to_csv(predictions_file, index=False)
         logger.info(f"Predictions saved to: {predictions_file}")
  
         # Salvo l'F1-score in un file TXT
         # Rimuovo le prime due lettere dal nome della figura
         f1_filename = figure_name[2:] if len(figure_name) > 2 else figure_name
-        f1_file_txt = os.path.join(reports_dir, f"f1-score_{f1_filename}.txt")
+        f1_file_txt = os.path.join(exp_reports_dir, f"f1-score_{f1_filename}.txt")
  
         with open(f1_file_txt, 'w') as f:
             f.write(f"F1-Score (Macro): {f1_scores['macro']:.6f}\n")
@@ -141,15 +115,17 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
  
         # Matrice di confusione
         cm = confusion_matrix(all_labels, all_preds)
+        unique_labels = np.unique(np.concatenate((all_labels, all_preds)))
+        labels_names = [labels_dict.get(i, str(i)) for i in unique_labels]
  
         # Etichette
-        if labels_dict:
+        """if labels_dict:
             labels_names = [labels_dict[i] for i in range(len(cm))]
         else:
-            labels_names = [str(i) for i in range(len(cm))]
+            labels_names = [str(i) for i in range(len(cm))]"""
  
         # Verifico che la directory di output esista
-        os.makedirs(figures_dir, exist_ok=True)
+        os.makedirs(exp_figures_dir, exist_ok=True)
  
         # Plot
         plt.figure(figsize=(16, 14), dpi=300)
@@ -165,251 +141,75 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y
         plt.tight_layout()  
  
         # Salvataggio
-        plt.savefig(os.path.join(figures_dir, f"{figure_name}.png"),
-                    bbox_inches='tight', dpi=300)  # Salvataggio in alta qualità
+        plt.savefig(os.path.join(exp_figures_dir, f"{figure_name}.png"),
+                    bbox_inches='tight', dpi=300)
         plt.close()
-        logger.info(f"Confusion Matrix saved")
+        logger.info(f"Confusion Matrix saved to: {os.path.join(exp_figures_dir, f'{figure_name}.png')}")
        
         return cm, predictions_df  # Restituisco sia la matrice di confusione che le predizioni
-    except FileNotFoundError:
-        logger.error(f"File dei pesi non trovato: {mdl_weights}")
-        return None, None
+
     except Exception as e:
-        logger.error(f"Si è verificato un errore durante la creazione della matrice di confusione: {str(e)}")
+        logger.error(f"Si è verificato un errore durante la creazione della matrice di confusione per {figure_name}: {e}")
         import traceback
         logger.error(f"Traceback completo: {traceback.format_exc()}")
         return None, None
 
 
 
-def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ball", save_path=None, class_names=None, script_suffix=None, figures_dir=FIGURES_DIR):
+def combine_kfold_confusion_matrices(exp_reports_dir, num_folds, class_names, exp_figures_dir):
     """
-    Combina le confusion matrix di tutti i fold in una singola CM finale
+    Combina i risultati delle predizioni di tutti i fold per creare una CM aggregata.
+
+    Parametri:
+        exp_reports_dir (str): La cartella dei report dell'esperimento dove sono i file CSV.
+        num_folds (int): Il numero di fold eseguiti.
+        class_names (list): Lista dei nomi delle classi per il grafico.
+        exp_figures_dir (str): La cartella dove salvare il grafico finale.
     """
     
-    # Se script_suffix non è fornito, deducilo automaticamente
-    if script_suffix is None:
-        import inspect
-        import os
-        
-        # Ottieni il frame del chiamante (lo script che chiama questa funzione)
-        caller_frame = inspect.currentframe().f_back
-        caller_filename = caller_frame.f_globals.get('__file__', '')
-        
-        if caller_filename:
-            # Estrai il nome del file senza path e senza estensione
-            script_name = os.path.splitext(os.path.basename(caller_filename))[0]
-            script_suffix = script_name
-            print(f"Script suffix dedotto automaticamente: {script_suffix}")
-        else:
-            script_suffix = f"T{toy_name}_PTN*_PTA*_FTN*_FTA*"
-            print(f"Usando pattern wildcard: {script_suffix}")
+    logger.info("\n--- Aggregazione delle Matrici di Confusione dei K-Fold ---")
     
     all_true_labels = []
     all_predicted_labels = []
     
-    # Pattern aggiornati per trovare i file - senza il toy_name nel mezzo
-    search_patterns = [
-        f"test_predictions__test_fold_{{}}_kfold_inference_{num_folds}_folds_{script_suffix}.csv",
-        # Pattern originale senza "test_"
-        f"predictions__test_fold_{{}}_kfold_inference_{num_folds}_folds_{script_suffix}.csv",
-        # Pattern con wildcard
-        f"test_predictions__test_fold_{{}}_kfold_inference_{num_folds}_folds_T{toy_name}*.csv",
-        f"predictions__test_fold_{{}}_kfold_inference_{num_folds}_folds_T{toy_name}*.csv",
-        # Pattern originali per compatibilità
-        f"test_predictions__test_fold_{{}}_kfold_inference_{toy_name}_{num_folds}_folds_{script_suffix}.csv",
-        f"predictions__test_fold_{{}}_kfold_inference_{toy_name}_{num_folds}_folds_{script_suffix}.csv",
-    ]
     
-    print(f"Cercando file per script: {script_suffix}")
-    
-    # Leggo i risultati di ogni fold
+    # Cicla su ogni fold per caricare i risultati
     for fold in range(1, num_folds + 1):
-        file_found = False
+        # Il nome del file da cercare
+        predictions_file = os.path.join(exp_reports_dir, f"predictions_TEST_fold_{fold}.csv")
         
-        for pattern in search_patterns:
-            if '*' in pattern.format(fold):
-                # Usa glob per pattern con wildcard
-                import glob
-                full_pattern = os.path.join(fold_results_dir, pattern.format(fold))
-                matching_files = glob.glob(full_pattern)
-                
-                # Filtra per trovare il file più specifico che corrisponde al nostro script
-                if script_suffix and script_suffix != f"T{toy_name}_PTN*_PTA*_FTN*_FTA*":
-                    # Cerca file che contengono parti del script suffix
-                    best_match = None
-                    max_score = 0
-                    for file_path in matching_files:
-                        filename = os.path.basename(file_path)
-                        # Calcola score di similarità
-                        score = sum(1 for part in script_suffix.split('_') if part in filename)
-                        if score > max_score:
-                            max_score = score
-                            best_match = file_path
-                    
-                    if best_match:
-                        matching_files = [best_match]
-                
-                if matching_files:
-                    predictions_file = matching_files[0]
-                else:
-                    continue
-            else:
-                # Path diretto senza wildcard
-                predictions_file = os.path.join(fold_results_dir, pattern.format(fold))
-                if not os.path.exists(predictions_file):
-                    continue
-            
-            # Se arriviamo qui, abbiamo trovato un file
-            print(f"File trovato per fold {fold}: {os.path.basename(predictions_file)}")
-            
-            try:
-                df_fold = pd.read_csv(predictions_file)
-                
-                # Determina le colonne corrette
-                if 'true_label' in df_fold.columns and 'predicted_label' in df_fold.columns:
-                    true_col = 'true_label'
-                    pred_col = 'predicted_label'
-                elif 'y_true' in df_fold.columns and 'y_pred' in df_fold.columns:
-                    true_col = 'y_true'
-                    pred_col = 'y_pred'
-                elif 'true' in df_fold.columns and 'predicted' in df_fold.columns:
-                    true_col = 'true'
-                    pred_col = 'predicted'
-                else:
-                    # Usa le prime due colonne
-                    true_col = df_fold.columns[0]
-                    pred_col = df_fold.columns[1]
-                
-                all_true_labels.extend(df_fold[true_col].tolist())
-                all_predicted_labels.extend(df_fold[pred_col].tolist())
-                
-                print(f"Fold {fold}: {len(df_fold)} predizioni caricate")
-                file_found = True
-                break
-                
-            except Exception as e:
-                print(f"Errore nel leggere {predictions_file}: {e}")
-                continue
-        
-        if not file_found:
-            print(f"WARNING: Nessun file trovato per fold {fold}")
-            # Debug: mostra i file disponibili per questo fold
-            import glob
-            debug_pattern = os.path.join(fold_results_dir, f"*fold_{fold}*{toy_name}*.csv")
-            debug_files = glob.glob(debug_pattern)
-            if debug_files:
-                print(f"  File disponibili per fold {fold}:")
-                for f in debug_files:
-                    print(f"    - {os.path.basename(f)}")
+        if os.path.exists(predictions_file):
+            logger.info(f"Caricamento predizioni dal file: {predictions_file}")
+            df_fold = pd.read_csv(predictions_file)
+            all_true_labels.extend(df_fold['true_label'].tolist())
+            all_predicted_labels.extend(df_fold['predicted_label'].tolist())
+        else:
+            logger.warning(f"File delle predizioni per il fold {fold} non trovato: {predictions_file}")
+
+
+    if not all_true_labels:
+        logger.error("Nessun file di predizioni trovato. Impossibile creare la matrice aggregata.")
+        return None
     
-    # Controllo se sono stati caricati dati
-    if len(all_true_labels) == 0:
-        print("ERROR: Nessun dato caricato. File disponibili nella directory:")
-        import glob
-        csv_files = glob.glob(os.path.join(fold_results_dir, "*predictions*.csv"))
-        for csv_file in csv_files:
-            if toy_name in csv_file:
-                print(f"  - {os.path.basename(csv_file)}")
-        return None, None, None
-    
-    # Converto in array numpy
-    all_true_labels = np.array(all_true_labels)
-    all_predicted_labels = np.array(all_predicted_labels)
-    
-    print(f"\nTotale predizioni: {len(all_true_labels)}")
-    print(f"Classi uniche (true): {np.unique(all_true_labels)}")
-    print(f"Classi uniche (predicted): {np.unique(all_predicted_labels)}")
-    
-    # Creo la confusion matrix combinata
+   # Crea la confusion matrix combinata
     cm_combined = confusion_matrix(all_true_labels, all_predicted_labels)
     
-    # Ottengo le classi
-    classes = np.unique(np.concatenate([all_true_labels, all_predicted_labels]))
-    
-    if class_names:
-        tick_labels = class_names
-    else:
-        tick_labels = [f'Class_{i}' for i in classes]
+    # Crea e salva il grafico
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm_combined, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=class_names, yticklabels=class_names)
+    plt.title(f'Combined Confusion Matrix ({num_folds}-Fold CV)', fontsize=16)
+    plt.xlabel('Predicted Label', fontsize=14)
+    plt.ylabel('True Label', fontsize=14)
+    plt.tight_layout()
 
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(cm_combined, annot=True, fmt='d', cmap='Greys', 
-                xticklabels=tick_labels, yticklabels=tick_labels,
-                cbar_kws={'label': 'Count'})
-    
-    # Titolo più descrittivo
-    title = f'Combined Confusion Matrix - {num_folds} Fold CV ({toy_name.upper()})'
-    if script_suffix and script_suffix != f"T{toy_name}_PTN*_PTA*_FTN*_FTA*":
-        title += f'\n{script_suffix}'
-    
-    plt.title(title)
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
-    plt.xticks(rotation=45, ha='right')
-    plt.yticks(rotation=0)
+    save_path = os.path.join(exp_figures_dir, "cm_AGGREGATED_kfold.png")
+    plt.savefig(save_path, dpi=300)
+    plt.close()
+    logger.info(f"Matrice di confusione aggregata salvata in: {save_path}")
 
-    if save_path:
-        # Assicurati che la directory esista
-        os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else figures_dir, exist_ok=True)
-        full_save_path = save_path if os.path.dirname(save_path) else os.path.join(figures_dir, save_path)
-        plt.savefig(full_save_path, dpi=300, bbox_inches='tight')
-        print(f"Confusion matrix salvata in: {full_save_path}")
-    
-    plt.show()
-    
-    # Calcolo metriche
-    accuracy = np.trace(cm_combined) / np.sum(cm_combined)
-    
-    # Report di classificazione
-    report = classification_report(all_true_labels, all_predicted_labels, 
-                                 target_names=tick_labels if class_names else [f'Class_{i}' for i in classes])
-    
-    print("\n" + "="*50)
-    print("CONFUSION MATRIX COMBINATA")
-    print("="*50)
-    print(f"Script: {script_suffix}")
-    print(f"Accuracy: {accuracy:.4f}")
-    print(f"\nConfusion Matrix:\n{cm_combined}")
-    print(f"\nClassification Report:\n{report}")
-    
-    # Salvo i risultati
-    if save_path:
-        base_path = os.path.splitext(save_path)[0]
-        
-        # Salvo la confusion matrix come CSV
-        cm_df = pd.DataFrame(cm_combined, 
-                           index=[f'True_{i}' for i in classes],
-                           columns=[f'Pred_{i}' for i in classes])
-        cm_df.to_csv(f"{base_path}_matrix.csv")
-        
-        # Salvo le predizioni combinate
-        combined_predictions = pd.DataFrame({
-            'true': all_true_labels,
-            'predicted': all_predicted_labels
-        })
-        combined_predictions.to_csv(f"{base_path}_predictions.csv", index=False)
-        
-        # Salvo le metriche
-        metrics = {
-            'accuracy': accuracy,
-            'total_predictions': len(all_true_labels),
-            'num_folds': num_folds,
-            'toy_name': toy_name,
-            'script_suffix': script_suffix
-        }
-        metrics_df = pd.DataFrame([metrics])
-        metrics_df.to_csv(f"{base_path}_metrics.csv", index=False)
-        
-        print(f"File salvati con prefisso: {base_path}")
-    
-    return cm_combined, all_true_labels, all_predicted_labels
-# Configurazione dei parametri di stile per i grafici
-plt.rcParams['font.family'] = 'serif'
-plt.rcParams['font.serif'] = ['Times New Roman', 'DejaVu Serif']
-plt.rcParams['font.size'] = 12
-plt.rcParams['axes.linewidth'] = 0.8
-plt.rcParams['grid.linewidth'] = 0.5
-plt.rcParams['grid.alpha'] = 0.3
+    return cm_combined
+
 
 def create_class_distribution_bar_chart(Y_train, Y_test, toy_name="CAR", save_path=None):
     """

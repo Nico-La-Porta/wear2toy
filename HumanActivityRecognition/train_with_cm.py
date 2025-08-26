@@ -67,283 +67,208 @@ class EarlyStopper:
                 return True  # Fermati
         return False
 
-def train(net, train_loader, test_loader=None, epochs: int = 10, batch_size: int = 16, 
-          lr: float = 0.01, patience: int = 7, figure_name: str = "figure", 
-          f1_average: str = 'macro', validate: bool = True, save_confusion_matrix: bool = False, 
-          criterion=None, save_final_results: bool = False, is_best_trial: bool = False, 
-          figures_dir=None, reports_dir=None):
+
+#Colleziono tutte le predizioni e le etichette dell'intera epoca e poi calcolo l'F1 score una sola volta su tutti i dati.
+
+def train(net, train_loader, val_loader, 
+          exp_figures_dir: str,
+          exp_reports_dir: str,
+          # Altri parametri
+          epochs: int = 10,
+          lr: float = 0.01,
+          patience: int = 7,
+          figure_name: str = "figure",
+          f1_average: str = 'macro',
+          criterion=None,
+          # Parametro per controllare se salvare i grafici di questa sessione di training
+          save_plots: bool = False):
     
+    """
+    Addestra e valida un modello di rete neurale.
 
-    if validate and test_loader is None:
-        raise ValueError("test_loader è richiesto quando validate è True")
-    os.makedirs(FIGURES_DIR, exist_ok=True)  # Assicura che la cartella per le figure esista
+    Args:
+        net (torch.nn.Module): Il modello da addestrare.
+        train_loader (DataLoader): DataLoader per il set di training.
+        val_loader (DataLoader): DataLoader per il set di validazione.
+        exp_figures_dir (str): Cartella dove salvare i grafici.
+        exp_reports_dir (str): Cartella dove salvare i report.
+        epochs (int): Numero massimo di epoche.
+        lr (float): Learning rate.
+        patience (int): Pazienza per l'early stopping.
+        figure_name (str): Nome base per i file dei grafici.
+        f1_average (str): Metodo di calcolo per F1-score multi-classe.
+        criterion: La funzione di loss. Se None, usa CrossEntropyLoss.
+        save_plots (bool): Se True, salva i grafici delle curve di apprendimento.
+    
+    Returns:
+        float: Il miglior F1-score ottenuto sul set di validazione.
+    """
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    net.to(device)
+    # Imposta l'ottimizzatore e la funzione di loss.
     opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
     # Usa il criterion passato come parametro, altrimenti usa CrossEntropyLoss di default
     if criterion is None:
         criterion = torch.nn.CrossEntropyLoss()
 
-    # Pass the model to the appropriate device (GPU or CPU)
-    net.to(device)
-    if hasattr(criterion, 'to'):
-        criterion = criterion.to(device)
+    criterion.to(device)
+    
 
-    #storicizzo i valori di loss e accuracy
-    train_loss_history = [] 
-    val_loss_history = [] 
-    val_accuracy_history = []
-    val_f1score_history = []
-    train_f1score_history = []
+    # Inizializza le liste per salvare la cronologia delle performance.
+    train_loss_history, val_loss_history = [], []
+    train_f1_history, val_f1_history = [], []
 
-    #liste perr le predizioni e i target
-    all_train_preds = []
-    all_train_labels = []
-    all_test_preds = []
-    all_test_labels = []
 
-    all_train_indices = []
-    all_test_indices = []
-
-    best_f1score = 0
+    # Inizializza l'early stopper e la variabile per il miglior F1 score di validazione.
     early_stopper = EarlyStopper(patience=patience, min_delta=0.001)
-    # Variabili per salvare SOLO i risultati finali
-    final_train_results = []
-    final_test_results = []
+    best_val_f1 = 0.0
+    last_train_f1 = 0.0
+    logger.info(f"--- Inizio Training per '{figure_name}' ({epochs} epoche) ---")
+
+    # Ciclo di Training per ogni Epoca
+    # ------------------------------------
     for e in range(epochs):
+        
+        # --- Fase di Training per l'Epoca Corrente ---
+        net.train() # Mette il modello in modalità training (attiva dropout, etc.)
         train_losses = []
-        net.train()
-        epoch_train_results = []
-        #calcolo dell'f1-score di train
-        train_f1score = 0 #variabile per l'f1-score di train
+        # Liste temporanee per raccogliere le predizioni e le etichette dell'epoca.
+        epoch_train_preds, epoch_train_labels = [], []
+
         for batch_data in train_loader:
-            if len(batch_data) == 4:  # inputs, targets, indices
-                inputs, targets, indices, consecutivity = batch_data
-                all_train_indices.extend(indices.cpu().numpy() if isinstance(indices, torch.Tensor) else indices)
-            else:  # solo inputs, targets
-                inputs, targets = batch_data
-                indices = list(range(len(targets)))
-                consecutivity = [True] * len(targets)
-            
-            if isinstance(indices, torch.Tensor):
-                indices = indices.cpu().numpy().tolist()
-            if isinstance(consecutivity, torch.Tensor):
-                consecutivity = consecutivity.cpu().numpy().tolist()
-                
-            # Se indices è ancora problematico, usa range semplice
-            if not isinstance(indices, (list, tuple)):
-                indices = list(range(len(targets)))
-            if not isinstance(consecutivity, (list, tuple)):
-                consecutivity = [True] * len(targets)
-            inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
-            targets = targets.view(-1)
+            # Spacchetta i dati del batch. Ignoro i metadati (indici, etc.) con `_`.
+            inputs, targets, _, _ = batch_data
+            inputs, targets = inputs.to(device), targets.to(device, non_blocking=True)
             batch_size = inputs.size(0)
-            h = net.init_hidden(batch_size)
-            opt.zero_grad()
-            output, h = net(inputs, h, batch_size)
-            loss = criterion(output, targets.long())
-            train_losses.append(loss.item())
-
             
-
+            # Azzera i gradienti, inizializza lo stato nascosto.
+            opt.zero_grad()
+            h = net.init_hidden(batch_size)
+            
+            # Forward pass: ottiene l'output del modello.
+            output, h = net(inputs, h, batch_size)
+            
+            # Calcola la loss e fa la backpropagation.
+            loss = criterion(output, targets.long())
             loss.backward()
             opt.step()
-
-            #salvo le predizioni e i target per la confusion matrix di training
-            _, predicted = torch.max(output, 1) #prendo la classe con probabilità maggiore
-            all_train_preds.extend(predicted.cpu().numpy()) #aggiungo le predizioni alla lista
-            all_train_labels.extend(targets.cpu().numpy()) #aggiungo i target alla lista
-
-            # Salva i risultati di questo batch
-            for i in range(len(targets)):
-                epoch_train_results.append({
-                    'window_index': indices[i],
-                    'true_label': targets[i].cpu().item(),
-                    'predicted_label': predicted[i].cpu().item(),
-                    'is_consecutive': consecutivity[i],
-                    'correct': targets[i].cpu().item() == predicted[i].cpu().item(),
-                    'epoch': e + 1
-                })
-
-            #calcolo l'f1-score
-            train_f1score += f1_score(predicted.cpu(), targets.cpu(), average=f1_average)
+            
+            # Salva la loss e le predizioni del batch.
+            train_losses.append(loss.item())
+            _, predicted = torch.max(output, 1)
+            epoch_train_preds.extend(predicted.cpu().numpy())
+            epoch_train_labels.extend(targets.cpu().numpy())
         
+        # Calcola le metriche medie per l'intera epoca di training.
         train_loss_history.append(np.mean(train_losses))
-        train_f1score_history.append(train_f1score / len(train_loader)) #calcolo l'f1-score medio
-
-        
-        val_losses = []
-        accuracy = 0
-        f1score = 0
-        epoch_test_results = []
-        current_f1score = 0
-
-        if validate:
-            net.eval()
-
-            with torch.no_grad():
-                for batch_data in test_loader:
-                    if len(batch_data) == 4:
-                        inputs, targets, indices, consecutivity = batch_data
-                    else:
-                        inputs, targets = batch_data
-                        indices = list(range(len(targets)))
-                        consecutivity = [True] * len(targets)
-                    if isinstance(indices, torch.Tensor):
-                        indices = indices.cpu().numpy().tolist()
-                    if isinstance(consecutivity, torch.Tensor):
-                        consecutivity = consecutivity.cpu().numpy().tolist()
-                    
-                    # Se indices è ancora problematico, usa range semplice
-                    if not isinstance(indices, (list, tuple)):
-                        indices = list(range(len(targets)))
-                    if not isinstance(consecutivity, (list, tuple)):
-                        consecutivity = [True] * len(targets)
-
+        current_train_f1 = f1_score(epoch_train_labels, epoch_train_preds, average=f1_average, zero_division=0)
+        train_f1_history.append(current_train_f1)
+        last_train_f1 = current_train_f1 #salvo valore epoca corrente
+        if val_loader:
+        # --- Fase di Validazione per l'Epoca Corrente ---
+            net.eval() # Mette il modello in modalità valutazione (disattiva dropout, etc.)
+            val_losses = []
+            epoch_val_preds, epoch_val_labels = [], []
+            
+            with torch.no_grad(): # Disabilita il calcolo dei gradienti per la validazione.
+                for batch_data in val_loader:
+                    inputs, targets, _, _ = batch_data
+                    inputs, targets = inputs.to(device), targets.to(device)
                     batch_size = inputs.size(0)
                     val_h = net.init_hidden(batch_size)
-                    #val_h = tuple([each.data for each in val_h])
-                    net.to(device)
-                    inputs, targets = inputs.to(device), targets.to(device)
-                    targets = targets.view(-1)
-                    output, val_h = net(inputs, val_h, batch_size)
+                    output, _ = net(inputs, val_h, batch_size)
                     val_loss = criterion(output, targets.long())
                     val_losses.append(val_loss.item())
+                    _, predicted = torch.max(output, 1)
+                    epoch_val_preds.extend(predicted.cpu().numpy())
+                    epoch_val_labels.extend(targets.cpu().numpy())
 
-                    top_p, top_class = output.topk(1, dim=1)
-                    equals = top_class == targets.view(*top_class.shape).long()
-                    accuracy += torch.mean(equals.type(torch.FloatTensor))
-                    f1score += f1_score(top_class.cpu(), targets.view(*top_class.shape).long().cpu(), average=f1_average)
-
-                    #salvo le predizioni e i target per la confusion matrix di test
-                    all_test_preds.extend(top_class.cpu().numpy().flatten()) # flatten() per avere un array 1D
-                    all_test_labels.extend(targets.cpu().numpy())
-
-                    for i in range(len(targets)):
-                        epoch_test_results.append({
-                            'window_index': indices[i],
-                            'true_label': targets[i].cpu().item(),
-                            'predicted_label': top_class[i].cpu().item(),
-                            'is_consecutive': consecutivity[i],
-                            'correct': targets[i].cpu().item() == top_class[i].cpu().item(),
-                            'epoch': e + 1
-                        })
-
+            # Calcola le metriche medie per l'intera epoca di validazione.
             val_loss_history.append(np.mean(val_losses))
-            val_accuracy_history.append(accuracy / len(test_loader))
-            val_f1score_history.append(f1score / len(test_loader))
-
-
-                    # Calcola F1 score per early stopping
-        if validate:
-            epoch_preds = [r['predicted_label'] for r in epoch_test_results]
-            epoch_true = [r['true_label'] for r in epoch_test_results]
-            current_f1score = f1_score(epoch_true, epoch_preds, average=f1_average)
+            current_val_f1 = f1_score(epoch_val_labels, epoch_val_preds, average=f1_average, zero_division=0)
+            val_f1_history.append(current_val_f1)
             
-            if current_f1score > best_f1score:
-                best_f1score = current_f1score
-                # Salva i risultati della migliore epoca
-                final_train_results = epoch_train_results.copy()
-                final_test_results = epoch_test_results.copy()
+            # Aggiorna il miglior F1 score di validazione trovato finora.
+            if current_val_f1 > best_val_f1:
+                best_val_f1 = current_val_f1
+                logger.info(f"Nuovo miglior F1-score di validazione: {best_val_f1:.4f}")
 
-        # Early stopping check...
-        if early_stopper.early_stop(current_f1score):
-            break
+            logger.info(f"Epoch {e+1}/{epochs} | Train Loss: {np.mean(train_losses):.4f} | Train F1: {current_train_f1:.4f} | Val Loss: {np.mean(val_losses):.4f} | Val F1: {current_val_f1:.4f}")
+            
+            # Controlla se è il caso di fermare il training in anticipo.
+            if early_stopper.early_stop(current_val_f1):
+                logger.info(f"Early stopping attivato all'epoca {e+1} perché non ci sono miglioramenti.")
+                break
         else:
-            logger.info(f"Epoch: {e+1}/{epochs}... "
-                    f"Train Loss: {np.mean(train_losses):.4f}... ")
-    
-    if save_confusion_matrix:
-    # Matrice di confusione per il training set
-        cm_train = confusion_matrix(all_train_labels, all_train_preds)
-        plt.figure(figsize=(16, 13))
-        sns.heatmap(cm_train, annot=True, fmt="d", cmap="Greens", xticklabels=train_loader.dataset.classes, yticklabels=train_loader.dataset.classes, linewidths=0.5, square=True)
-        plt.title("Confusion Matrix - Train Set")
-        plt.xlabel("Predicted")
-        plt.ylabel("True")
-        plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_train_confusion_matrix.png"))
+            logger.info(f"Epoch {e+1}/{epochs} | Train Loss: {np.mean(train_losses):.4f} | Train F1: {current_train_f1:.4f} | (Nessuna validazione)")
+
+    # Fine del Training: Salvataggio Grafici e Return
+    # --------------------------------------------------
+    # Se specificato, salva i grafici delle curve di apprendimento.
+    if save_plots and val_loader:
+        logger.info(f"Salvataggio dei grafici di training per '{figure_name}'...")
+        os.makedirs(exp_figures_dir, exist_ok=True)
+        
+        # Grafico F1-Score
+        plt.figure(figsize=(10, 6))
+        plt.plot(train_f1_history, label="Train F1-Score")
+        plt.plot(val_f1_history, label="Validation F1-Score")
+        plt.title(f"F1 Score Curve - {figure_name}")
+        plt.xlabel("Epoch")
+        plt.ylabel(f"F1-Score ({f1_average})")
+        plt.legend()
+        plt.grid(True)
+        f1_curve_path = os.path.join(exp_figures_dir, f"f1_curve_{figure_name}.png")
+        plt.savefig(f1_curve_path, dpi=300)
         plt.close()
-
-        if validate:
-            # Confusion Matrix - Test Set
-            cm_test = confusion_matrix(all_test_labels, all_test_preds)
-            plt.figure(figsize=(16, 13))
-            sns.heatmap(cm_test, annot=True, fmt="d", cmap="Blues", xticklabels=test_loader.dataset.classes, yticklabels=test_loader.dataset.classes, linewidths=0.5, square=True)
-            plt.title("Confusion Matrix - Test Set")
-            plt.xlabel("Predicted")
-            plt.ylabel("True")
-            plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_test_confusion_matrix.png"))
-            plt.close()
-
-            # Curve di train e validazione F1-score
-            plt.figure(figsize=(10, 6))
-            plt.plot(train_f1score_history, label="Train F1-Score", color="blue")
-            plt.plot(val_f1score_history, label="Test F1-Score", color="green")
-            plt.xlabel("Epochs")
-            plt.ylabel("F1-Score")
-            plt.title("F1-Score (Train vs Test)")
-            plt.legend()
-
-            # Trovo l'epoch con il valore massimo di F1-score
-            max_f1_epoch = np.argmax(val_f1score_history)
-            max_f1_value = val_f1score_history[max_f1_epoch]
-            max_train_f1_epoch = np.argmax(train_f1score_history)
-            max_train_f1_value = train_f1score_history[max_train_f1_epoch]
-
-
-            # Aggiungi i punti e le annotazioni nel grafico per il massimo F1-score
-            plt.scatter(max_f1_epoch, max_f1_value, color="red", label=f"Max Val F1: {max_f1_value:.6f}")
-            plt.text(max_f1_epoch, max_f1_value, f"{max_f1_value:.6f}", fontsize=12, verticalalignment='bottom', color="red")
-            
-            plt.scatter(max_train_f1_epoch, max_train_f1_value, color="orange", label=f"Max Train F1: {max_train_f1_value:.6f}")
-            plt.text(max_train_f1_epoch, max_train_f1_value, f"{max_train_f1_value:.6f}", fontsize=12, verticalalignment='bottom', color="orange")
-
-            plt.savefig(os.path.join(FIGURES_DIR, f"{figure_name}_f1score_curve.png"))
-            plt.close()  # Chiude la figura
-    
-    # Salva i CSV finali SOLO se è il miglior trial
-    if save_final_results and is_best_trial:
-        save_path = reports_dir if reports_dir else REPORTS_DIR
-        os.makedirs(save_path, exist_ok=True)
         
-        # DISTINGUI tra K-Fold training e Final training
-        is_final_training = "final" in figure_name.lower() and "fold" not in figure_name.lower()
+        # Grafico Loss
+        plt.figure(figsize=(10, 6))
+        plt.plot(train_loss_history, label="Train Loss")
+        plt.plot(val_loss_history, label="Validation Loss")
+        plt.title(f"Loss Curve - {figure_name}")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.legend()
+        plt.grid(True)
+        loss_curve_path = os.path.join(exp_figures_dir, f"loss_curve_{figure_name}.png")
+        plt.savefig(loss_curve_path, dpi=300)
+        plt.close()
         
-        if is_final_training:
-            # TRAINING FINALE: salva un unico CSV con tutte le finestre
-            logger.info("=== SALVATAGGIO RISULTATI TRAINING FINALE ===")
-            
-            # CSV Train finale (tutte le 27 finestre)
-            train_df = pd.DataFrame(final_train_results)
-            train_csv_path = os.path.join(save_path, f"final_train_results_all_data.csv")
-            train_df.to_csv(train_csv_path, index=False)
-            logger.info(f"Train results salvati: {train_csv_path} ({len(train_df)} finestre)")
-            
-            # CSV Test finale (tutte le 27 finestre - se presente test_loader)
-            if final_test_results:
-                test_df = pd.DataFrame(final_test_results)
-                test_csv_path = os.path.join(save_path, f"final_test_results_all_data.csv")
-                test_df.to_csv(test_csv_path, index=False)
-                logger.info(f"Test results salvati: {test_csv_path} ({len(test_df)} finestre)")
-            
-        else:
-            # K-FOLD TRAINING: NON salvare CSV (solo per debug se necessario)
-            logger.info(f"K-Fold training - CSV non salvati per {figure_name}")
-            # Opzionale: salva solo per debug
-            # train_df = pd.DataFrame(final_train_results)
-            # train_csv_path = os.path.join(save_path, f"debug_train_{figure_name}.csv")
-            # train_df.to_csv(train_csv_path, index=False)
+        logger.info(f"Grafici di training salvati in: {exp_figures_dir}")
 
-    return best_f1score
+    # Ritorna il miglior F1 score di validazione. Questo valore è cruciale per Optuna.
+    logger.info(f"Training per '{figure_name}' completato. Miglior F1-score di validazione raggiunto: {best_val_f1:.4f}")
+    # Decide quale valore restituire in base alla presenza del val_loader.
+    if val_loader:
+        # Se c'era validazione, restituisco il miglior F1 score di validazione.
+        # Questo è il valore che serve a Optuna per l'ottimizzazione.
+        logger.info(f"Training con validazione completato. Miglior F1 di validazione: {best_val_f1:.4f}")
+        return best_val_f1
+    else:
+        # Se non c'era validazione (training finale), restituiamo l'F1 score
+        # di training dell'ultima epoca. Questo ci dà una metrica concreta.
+        logger.info(f"Training finale completato. F1 di training dell'ultima epoca: {last_train_f1:.4f}")
+        return last_train_f1
 
 
 
-def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro', save_confusion_matrix: bool = False, save_f1_score: bool = True, save_predictions_csv: bool = True, criterion=None, labels_dict=None, figures_dir=FIGURES_DIR, reports_dir=REPORTS_DIR):
+def evaluate_model(net, test_loader, exp_figures_dir: str, 
+                   exp_reports_dir: str,
+                   figure_name="evaluation", 
+                   f1_average='macro', 
+                   save_confusion_matrix: bool = False, 
+                   save_f1_score: bool = True, 
+                   save_predictions_csv: bool = True, 
+                   criterion=None, 
+                   labels_dict=None):
     net.eval()
     if criterion is None:
         criterion = torch.nn.CrossEntropyLoss()
     all_test_preds = []
     all_test_labels = []
-    all_test_indices = []
+    all_test_metadata = []
     all_test_consecutivity = []
     val_losses = []
     val_accuracy = 0
@@ -361,7 +286,7 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
         for batch_idx, batch_data in enumerate(test_loader):
             logger.info(f"Processing batch {batch_idx + 1}/{len(test_loader)}")
             if len(batch_data) == 4:  # data, labels, indices, consecutivity
-                inputs, targets, indices, consecutivity = batch_data
+                inputs, targets, indices_batch, consecutivity_batch = batch_data
             else:
                 inputs, targets = batch_data
                 indices = list(range(len(targets)))
@@ -387,7 +312,7 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
             val_accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
 
 
-            all_test_indices.extend(indices)
+            all_test_metadata.extend(indices)
             all_test_consecutivity.extend(consecutivity)
             logger.info(f"Batch {batch_idx + 1} - Indici salvati: {indices}")
         # DEBUG: Risultati finali
@@ -395,7 +320,7 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
     logger.info(f"Lunghezza liste finali:")
     logger.info(f"  - all_test_preds: {len(all_test_preds)}")
     logger.info(f"  - all_test_labels: {len(all_test_labels)}")
-    logger.info(f"  - all_test_indices: {len(all_test_indices)}")
+    logger.info(f"  - all_test_metadata: {len(all_test_metadata)}")
     logger.info(f"  - all_test_consecutivity: {len(all_test_consecutivity)}")
     # Calcolo del mean_loss e mean_accuracy 
     mean_loss = np.mean(val_losses)
@@ -415,12 +340,13 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
     
     # DataFrame con tutte le informazioni necessarie per l'analisi degli errori
     predictions_df = pd.DataFrame({
-        'window_index': all_test_indices,
-        'true_label': all_test_labels,
-        'predicted_label': all_test_preds,
-        'is_consecutive': all_test_consecutivity,
-        'correct': [true == pred for true, pred in zip(all_test_labels, all_test_preds)]
-    })
+            # Estraiamo l'ID globale da ogni dizionario di metadati
+            'global_window_id': [meta['global_window_id'] for meta in all_test_metadata],
+            'true_label': all_test_labels,
+            'predicted_label': all_test_preds,
+            'is_consecutive': all_test_consecutivity,
+            'correct': [true == pred for true, pred in zip(all_test_labels, all_test_preds)]
+        })
 
 
     # Aggiungi nomi delle azioni se il mapping è fornito
@@ -431,21 +357,19 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
 
     # Salvataggio del CSV con informazioni complete
     if save_predictions_csv:
-        os.makedirs(reports_dir, exist_ok=True)
-        pred_filename = figure_name[2:] if len(figure_name) > 2 else figure_name
-        pred_path = os.path.join(reports_dir, f"test_predictions_{pred_filename}.csv")
+        os.makedirs(exp_reports_dir, exist_ok=True)
+        pred_path = os.path.join(exp_reports_dir, f"predictions_{figure_name}.csv")
         predictions_df.to_csv(pred_path, index=False)
         logger.info(f"Test predictions saved to: {pred_path}")
 
 
     # Salvataggio F1-score
     if save_f1_score:
-        # Assicurati che la directory esista
-        os.makedirs(reports_dir, exist_ok=True)
         
-        # Rimuovo le prime due lettere dal nome 
-        f1_filename = figure_name[2:] if len(figure_name) > 2 else figure_name
-        f1_file_txt = os.path.join(reports_dir, f"f1-score_{f1_filename}.txt")
+        os.makedirs(exp_reports_dir, exist_ok=True)
+        
+         # Salvo il file TXT con un nome coerente.
+        f1_file_txt = os.path.join(exp_reports_dir, f"f1-score_{figure_name}.txt")
         
         # Salvo l'F1-score in TXT
         with open(f1_file_txt, 'w') as f:
@@ -464,6 +388,7 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
         logger.info(f"F1-scores saved to: {f1_file_txt}")
 
     if save_confusion_matrix:
+        os.makedirs(exp_figures_dir, exist_ok=True)
         cm = confusion_matrix(all_test_labels, all_test_preds)
         plt.figure(figsize=(16, 14), dpi=300)
         
@@ -485,10 +410,10 @@ def evaluate_model(net, test_loader, figure_name="evaluation", f1_average='macro
         plt.xlabel("Predicted", fontsize=16)
         plt.ylabel("True", fontsize=16)
         plt.tight_layout()  
-        os.makedirs(figures_dir, exist_ok=True)
-        plt.savefig(os.path.join(figures_dir, f"{figure_name}_eval_confusion_matrix.png"), 
-                    bbox_inches='tight', dpi=300)  # Salvataggio in alta qualità
+        cm_path = os.path.join(exp_figures_dir, f"cm_{figure_name}.png")
+        plt.savefig(cm_path, bbox_inches='tight', dpi=300)
         plt.close()
+        logger.info(f"Confusion Matrix saved to: {cm_path}")
 
 
     return mean_loss, mean_accuracy, f1_scores[f1_average]
