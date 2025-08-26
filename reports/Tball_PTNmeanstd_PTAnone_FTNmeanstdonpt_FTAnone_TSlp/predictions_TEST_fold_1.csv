@@ -1,0 +1,11 @@
+global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,predicted_action
+2,2,2,1,True,stack,stack
+5,2,2,1,True,stack,stack
+6,2,2,1,True,stack,stack
+8,2,2,1,True,stack,stack
+11,2,2,1,True,stack,stack
+13,1,2,1,False,grab,stack
+18,0,2,1,False,throw,stack
+22,0,2,1,False,throw,stack
+24,3,2,1,False,move,stack
+26,3,2,1,False,move,stack

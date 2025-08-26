@@ -58,7 +58,7 @@ def collate_fn(batch):
     X_batch = torch.stack([x.clone().detach() for x in data_batch])
     Y_batch = torch.tensor(labels_batch, dtype=torch.long)
     indices_batch = list(indices_batch)
-    consecutivity_batch = list(consecutivity_batch)
+    consecutivity_batch = [int(c) for c in consecutivity_batch]
     
     return X_batch, Y_batch, indices_batch, consecutivity_batch
 

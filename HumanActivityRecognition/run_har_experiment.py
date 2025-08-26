@@ -21,7 +21,7 @@ from optuna.pruners import MedianPruner
 # Import custom modules
 from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 import sliding_window_on_data
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset
+from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn
 import train_with_cm
 import normalization
 from utils.focal_loss import FocalLoss, LabelSmoothingCrossEntropy, WeightedCrossEntropyLoss, CombinedLoss
@@ -661,14 +661,17 @@ def main(args):
                 X_train_aug = transformation_function(X_train_fold)
                 X_train_fold = np.concatenate([X_train_fold, X_train_aug], axis=0)
                 Y_train_fold = np.concatenate([Y_train_fold, Y_train_fold.copy()], axis=0)
-
+                train_indices_meta.extend(train_indices_meta.copy())
+                train_consec = np.concatenate([train_consec, train_consec.copy()], axis=0)
             train_dataset = HARDataset(X_train_fold, Y_train_fold, train_indices_meta, train_consec)
             val_dataset = HARDataset(X_val_fold, Y_val_fold, val_indices_meta, val_consec)
             test_dataset = HARDataset(X_test_fold, Y_test_fold, test_indices_meta, test_consec)
 
 
             def objective_fold(trial):
-                lr = trial.suggest_categorical('lr', [1e-5, 1e-4, 1e-3])
+                #lr = trial.suggest_categorical('lr', [1e-5, 1e-4, 1e-3]) VALIDATION LOSS PIATTA 
+                lr = trial.suggest_categorical('lr', [5e-4, 1e-3, 5e-3, 1e-2]) 
+
                 batch_size = trial.suggest_categorical('batch_size', [2, 4])
                 loss_type = trial.suggest_categorical('loss_type', [
                     'focal', 'label_smoothing', 'weighted_ce', 'combined'
@@ -700,8 +703,8 @@ def main(args):
                 else:  # 'weighted_ce'
                     # Per la Cross Entropy pesata, usa i pesi calcolati prima.
                     criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
-                train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
-                val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+                train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, collate_fn=collate_fn)
+                val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False, collate_fn=collate_fn)
                 
                 model = DeepConvLSTM()
                 model.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
@@ -731,9 +734,9 @@ def main(args):
             model_final_fold.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
             model_final_fold = configure_model_for_tuning(model_final_fold, args.tuning_strategy, num_classes)
             
-            train_loader_final = DataLoader(train_dataset, batch_size=best_params_fold['batch_size'], shuffle=True, drop_last=False)
-            val_loader_final = DataLoader(val_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
-            test_loader = DataLoader(test_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
+            train_loader_final = DataLoader(train_dataset, batch_size=best_params_fold['batch_size'], shuffle=True, drop_last=False, collate_fn=collate_fn)
+            val_loader_final = DataLoader(val_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False, collate_fn=collate_fn)
+            test_loader = DataLoader(test_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False, collate_fn=collate_fn)
 
             logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
             logger.info(f"Train dataset size: {len(train_dataset)}")
@@ -823,7 +826,7 @@ def main(args):
 
         logger.info("Addestramento del modello finale su tutto il set di train/validazione...")
         full_train_val_dataset = HARDataset(X, Y_mapped, all_window_indices, all_consecutivity)
-        final_train_loader = DataLoader(full_train_val_dataset, batch_size=best_hyperparameters['batch_size'], shuffle=True)
+        final_train_loader = DataLoader(full_train_val_dataset, batch_size=best_hyperparameters['batch_size'], shuffle=True, collate_fn=collate_fn)
 
         final_model = DeepConvLSTM()
         final_model.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
@@ -846,6 +849,25 @@ def main(args):
         torch.save(final_model.state_dict(), final_model_path)
         logger.info(f"Modello finale salvato in: {final_model_path}")
 
+        logger.info("Valutazione del modello finale su tutti i dati di training...")
+
+        #creo data loader, uguale a final_train_loader con l'unica differenza che non faccio shuffle
+        final_eval_loader = DataLoader(full_train_val_dataset, 
+                                    batch_size=best_hyperparameters['batch_size'], 
+                                    shuffle=False, 
+                                    collate_fn=collate_fn)
+
+        train_with_cm.evaluate_model(
+            net=final_model,
+            test_loader=final_eval_loader,
+            exp_figures_dir=exp_figures_dir,
+            exp_reports_dir=exp_reports_dir,
+            figure_name="FINAL_training_evaluation", 
+            save_confusion_matrix=True,
+            save_predictions_csv=True,
+            save_f1_score=True,
+            labels_dict=labels_dict
+        )
 
         logger.info("Preparazione del hold-out test set per la valutazione finale...")
 
@@ -880,7 +902,7 @@ def main(args):
 
         # Crea il DataLoader per il test finale.
         test_dataset_final = HARDataset(X_test_final, Y_test_final_mapped)
-        test_loader_final = DataLoader(test_dataset_final, batch_size=best_hyperparameters['batch_size'])
+        test_loader_final = DataLoader(test_dataset_final, batch_size=best_hyperparameters['batch_size'], collate_fn=collate_fn)
 
         logger.info("Valutazione finale del modello sul hold-out test set...")
         train_with_cm.evaluate_model(
@@ -956,6 +978,8 @@ def main(args):
                 X_train_aug = transformation_function(X_train_fold)
                 X_train_fold = np.concatenate([X_train_fold, X_train_aug], axis=0)
                 Y_train_fold = np.concatenate([Y_train_fold, Y_train_fold.copy()], axis=0)
+                train_indices_meta.extend(train_indices_meta.copy())
+                train_consec = np.concatenate([train_consec, train_consec.copy()], axis=0)
 
             train_dataset = HARDataset(X_train_fold, Y_train_fold, train_indices_meta, train_consec)
             val_dataset = HARDataset(X_val_fold, Y_val_fold, val_indices_meta, val_consec)
@@ -963,7 +987,9 @@ def main(args):
 
             logger.info(f"--- Inizio ottimizzazione iperparametri per il Fold {fold + 1} ---")
             def objective_fold(trial):
-                lr = trial.suggest_categorical('lr', [1e-5, 1e-4, 1e-3])
+                #lr = trial.suggest_categorical('lr', [1e-5, 1e-4, 1e-3]) VALIDATION LOSS PIATTA 
+                lr = trial.suggest_categorical('lr', [5e-4, 1e-3, 5e-3, 1e-2]) 
+                
                 batch_size = trial.suggest_categorical('batch_size', [2, 4])
                 loss_type = trial.suggest_categorical('loss_type', [
                     'focal', 'label_smoothing', 'weighted_ce', 'combined'
@@ -995,8 +1021,8 @@ def main(args):
                     # Per la Cross Entropy pesata, usa i pesi calcolati prima.
                     criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
                 
-                train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
-                val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+                train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, collate_fn=collate_fn)
+                val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False, collate_fn=collate_fn)
                 
                 model = DeepConvLSTM()
                 model.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
@@ -1028,9 +1054,9 @@ def main(args):
             model_final_fold = configure_model_for_tuning(model_final_fold, args.tuning_strategy, num_classes)
 
             logger.info(f"--- Addestramento e valutazione del modello finale per il Fold {fold + 1} ---")
-            train_loader_final = DataLoader(train_dataset, batch_size=best_params_fold['batch_size'], shuffle=True, drop_last=False)
-            val_loader_final = DataLoader(val_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
-            test_loader = DataLoader(test_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False)
+            train_loader_final = DataLoader(train_dataset, batch_size=best_params_fold['batch_size'], shuffle=True, drop_last=False, collate_fn=collate_fn)
+            val_loader_final = DataLoader(val_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False, collate_fn=collate_fn)
+            test_loader = DataLoader(test_dataset, batch_size=best_params_fold['batch_size'], shuffle=False, drop_last=False, collate_fn=collate_fn)
 
             logger.info(f"\n=== DEBUG DATALOADER FOLD {fold + 1} ===")
             logger.info(f"Train dataset size: {len(train_dataset)}")
@@ -1131,7 +1157,7 @@ def main(args):
         # 2.3 Addestra un modello finale su TUTTI i dati (X e Y)
         logger.info("Addestramento del modello finale su tutti i dati disponibili...")
         final_dataset = HARDataset(X, Y_mapped, all_window_indices, all_consecutivity)
-        final_train_loader = DataLoader(final_dataset, batch_size=best_hyperparameters['batch_size'], shuffle=True)
+        final_train_loader = DataLoader(final_dataset, batch_size=best_hyperparameters['batch_size'], shuffle=True, collate_fn=collate_fn)
         
         final_model = DeepConvLSTM()
         final_model.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
@@ -1156,11 +1182,28 @@ def main(args):
         torch.save(final_model.state_dict(), final_model_path)
         logger.info(f"Modello finale salvato in: {final_model_path}")
 
+        logger.info("Valutazione del modello finale su tutti i dati di training...")
 
-        
+        #creo data loader, uguale a final_train_loader con l'unica differenza che non faccio shuffle
+        final_eval_loader = DataLoader(final_dataset, 
+                                    batch_size=best_hyperparameters['batch_size'], 
+                                    shuffle=False, 
+                                    collate_fn=collate_fn)
+
+        train_with_cm.evaluate_model(
+            net=final_model,
+            test_loader=final_eval_loader,
+            exp_figures_dir=exp_figures_dir,
+            exp_reports_dir=exp_reports_dir,
+            figure_name="FINAL_training_evaluation", 
+            save_confusion_matrix=True,
+            save_predictions_csv=True,
+            save_f1_score=True,
+            labels_dict=labels_dict
+        )
 
 
-
+    
 if __name__ == "__main__":
     args = parse_args()
     main(args)

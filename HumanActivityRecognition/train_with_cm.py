@@ -286,7 +286,7 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
         for batch_idx, batch_data in enumerate(test_loader):
             logger.info(f"Processing batch {batch_idx + 1}/{len(test_loader)}")
             if len(batch_data) == 4:  # data, labels, indices, consecutivity
-                inputs, targets, indices_batch, consecutivity_batch = batch_data
+                inputs, targets, indices, consecutivity = batch_data
             else:
                 inputs, targets = batch_data
                 indices = list(range(len(targets)))
