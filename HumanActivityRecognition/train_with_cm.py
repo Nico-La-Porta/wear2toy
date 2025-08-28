@@ -1,14 +1,18 @@
 import os
-import pandas as pd 
-import torch
+
 import numpy as np
+import pandas as pd 
+import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, f1_score
-import seaborn as sns
-from app_config import MODELS_DIR, FIGURES_DIR, REPORTS_DIR
-from utils import check_gpu
-from utils.log_config import logger
 from sklearn.utils.class_weight import compute_class_weight
+
+import torch
+import torch.nn.functional as F
+
+from app_config import MODELS_DIR, FIGURES_DIR, REPORTS_DIR
+from utils.log_config import logger
+from utils.plot import reliability_plot
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -262,7 +266,8 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
                    save_f1_score: bool = True, 
                    save_predictions_csv: bool = True, 
                    criterion=None, 
-                   labels_dict=None):
+                   labels_dict=None,
+                   plot_calibration_curve: bool = False):
     net.eval()
     if criterion is None:
         criterion = torch.nn.CrossEntropyLoss()
@@ -307,6 +312,14 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
             _, predicted = torch.max(output, 1)
             all_test_preds.extend(predicted.cpu().numpy())
             all_test_labels.extend(targets.cpu().numpy())
+
+            # CALIBRATION - Collect confidences for reliability plot
+            probabilities = F.softmax(output, dim=1)  # [BS, N_CLASSES]
+            max_conf, _ = torch.max(probabilities, dim=1)
+            if 'all_test_confs' not in locals():
+                all_test_confs = []
+            all_test_confs.extend(max_conf.cpu().numpy())
+
             top_p, top_class = output.topk(1, dim=1)
             equals = predicted == targets.long()
             val_accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
@@ -315,6 +328,14 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
             all_test_metadata.extend(indices)
             all_test_consecutivity.extend(consecutivity)
             logger.info(f"Batch {batch_idx + 1} - Indici salvati: {indices}")
+
+        # CALIBRATION - Plot the reliability_diagram
+        if 'all_test_confs' in locals() and len(all_test_confs) > 0:
+            reliability_plot(all_test_confs,
+                             all_test_preds,
+                             all_test_labels,
+                             save_path=exp_reports_dir)
+
         # DEBUG: Risultati finali
     logger.info(f"Totale finestre processate: {total_samples_processed}")
     logger.info(f"Lunghezza liste finali:")
