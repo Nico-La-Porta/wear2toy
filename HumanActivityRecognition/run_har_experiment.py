@@ -141,6 +141,134 @@ def selective_downsampling_by_padding(X, Y, kid_action_counts, toy_name, max_win
     logger.info(f"Finestre rimosse: {len(X) - len(X_filtered)}")
     
     return X_filtered, Y_filtered, dict(kid_action_counts_filtered)
+
+def balance_holdout_classes(X_train, Y_train, X_test, Y_test, 
+                          all_window_indices_train, all_window_indices_test,
+                          all_consecutivity_train, all_consecutivity_test,
+                          percentage_to_move=0.15, random_seed=42):
+    """
+    Bilancia le classi nel test set spostando finestre dal training set
+    quando alcune classi sono mancanti nel test set (holdout scenario).
+    
+    Args:
+        X_train, Y_train: Dati di training
+        X_test, Y_test: Dati di test (holdout)
+        all_window_indices_train/test: Metadati delle finestre
+        all_consecutivity_train/test: Informazioni di consecutività
+        percentage_to_move: Percentuale di finestre da spostare per classe mancante
+        random_seed: Seed per riproducibilità
+    
+    Returns:
+        tuple: (X_train_updated, Y_train_updated, X_test_updated, Y_test_updated,
+                indices_train_updated, indices_test_updated, 
+                consec_train_updated, consec_test_updated)
+    """
+    logger.info("=== INIZIO BILANCIAMENTO CLASSI HOLDOUT TEST ===")
+    
+    # Conta distribuzione classi
+    train_class_distribution = Counter(Y_train)
+    test_class_distribution = Counter(Y_test)
+    
+    # Trova classi mancanti nel test
+    all_classes = set(Y_train)
+    missing_classes = [cls for cls in all_classes if cls not in test_class_distribution]
+    
+    logger.info(f"Classi totali nel training: {sorted(all_classes)}")
+    logger.info(f"Classi presenti nel test: {sorted(test_class_distribution.keys())}")
+    logger.info(f"Classi mancanti nel test: {missing_classes}")
+    
+    if not missing_classes:
+        logger.info("Tutte le classi sono già presenti nel test. Nessun bilanciamento necessario.")
+        return (X_train, Y_train, X_test, Y_test, 
+                all_window_indices_train, all_window_indices_test,
+                all_consecutivity_train, all_consecutivity_test)
+    
+    # Calcola finestre da spostare per ogni classe mancante
+    windows_to_move = {}
+    for missing_class in missing_classes:
+        total_windows = train_class_distribution[missing_class]
+        windows_to_move[missing_class] = max(1, int(total_windows * percentage_to_move))
+        logger.info(f"Classe {missing_class}: {total_windows} finestre totali -> "
+                   f"{windows_to_move[missing_class]} finestre da spostare")
+    
+    # Seleziona indici da spostare
+    np.random.seed(random_seed)
+    indices_to_move = []
+    
+    for missing_class in missing_classes:
+        # Trova tutti gli indici delle finestre di questa classe nel training
+        class_indices = np.where(Y_train == missing_class)[0]
+        
+        # Seleziona casualmente le finestre da spostare
+        n_to_move = windows_to_move[missing_class]
+        if n_to_move > 0 and len(class_indices) >= n_to_move:
+            selected_indices = np.random.choice(class_indices, size=n_to_move, replace=False)
+            indices_to_move.extend(selected_indices)
+            logger.info(f"Selezionate {len(selected_indices)} finestre per classe {missing_class}")
+        elif len(class_indices) < n_to_move:
+            logger.warning(f"Classe {missing_class}: richieste {n_to_move} finestre ma disponibili solo {len(class_indices)}")
+            indices_to_move.extend(class_indices)  # Sposta tutte le finestre disponibili
+    
+    indices_to_move = np.array(indices_to_move, dtype=int)
+    logger.info(f"Totale finestre da spostare: {len(indices_to_move)}")
+    
+    if len(indices_to_move) == 0:
+        logger.info("Nessuna finestra da spostare.")
+        return (X_train, Y_train, X_test, Y_test, 
+                all_window_indices_train, all_window_indices_test,
+                all_consecutivity_train, all_consecutivity_test)
+    
+    # Estrai finestre da spostare
+    X_to_move = X_train[indices_to_move]
+    Y_to_move = Y_train[indices_to_move]
+    indices_to_move_meta = [all_window_indices_train[i] for i in indices_to_move]
+    consec_to_move = all_consecutivity_train[indices_to_move]
+    
+    # Crea maschera per mantenere le finestre nel training
+    mask_keep = np.ones(len(X_train), dtype=bool)
+    mask_keep[indices_to_move] = False
+    
+    # Aggiorna training set (rimuove finestre spostate)
+    X_train_updated = X_train[mask_keep]
+    Y_train_updated = Y_train[mask_keep]
+    indices_train_updated = [all_window_indices_train[i] for i in range(len(all_window_indices_train)) if mask_keep[i]]
+    consec_train_updated = all_consecutivity_train[mask_keep]
+    
+    # Aggiorna test set (aggiunge finestre spostate)
+    X_test_updated = np.concatenate([X_test, X_to_move], axis=0)
+    Y_test_updated = np.concatenate([Y_test, Y_to_move], axis=0)
+    indices_test_updated = all_window_indices_test + indices_to_move_meta
+    consec_test_updated = np.concatenate([all_consecutivity_test, consec_to_move], axis=0)
+    
+    # Log risultati finali
+    logger.info("=== RISULTATI BILANCIAMENTO ===")
+    logger.info(f"Training set: {X_train.shape} -> {X_train_updated.shape}")
+    logger.info(f"Test set: {X_test.shape} -> {X_test_updated.shape}")
+    
+    # Verifica nuova distribuzione
+    updated_train_distribution = Counter(Y_train_updated)
+    updated_test_distribution = Counter(Y_test_updated)
+    
+    logger.info("Nuova distribuzione training:")
+    for class_label in sorted(updated_train_distribution.keys()):
+        logger.info(f"   Classe {class_label}: {updated_train_distribution[class_label]} finestre")
+    
+    logger.info("Nuova distribuzione test:")
+    for class_label in sorted(updated_test_distribution.keys()):
+        logger.info(f"   Classe {class_label}: {updated_test_distribution[class_label]} finestre")
+    
+    # Verifica finale
+    still_missing = [cls for cls in all_classes if cls not in updated_test_distribution]
+    if still_missing:
+        logger.warning(f"Classi ancora mancanti nel test: {still_missing}")
+    else:
+        logger.info("✓ Tutte le classi ora presenti nel test set.")
+    
+    return (X_train_updated, Y_train_updated, X_test_updated, Y_test_updated,
+            indices_train_updated, indices_test_updated, 
+            consec_train_updated, consec_test_updated)
+
+
 def create_single_distribution_bar_chart(Y, toy_name="Dataset", save_path=None, title_suffix=" ", use_class_prefix=True):
     """
     Crea un bar diagram publication-ready per una singola distribuzione
@@ -799,8 +927,8 @@ def main(args):
                 save_predictions_csv=True,
                 save_f1_score=True,
                 labels_dict=labels_dict,
-                figures_dir=exp_figures_dir, # Specifica dove salvare i file
-                reports_dir=exp_reports_dir  # Specifica dove salvare i report
+                exp_figures_dir=exp_figures_dir, # Specifica dove salvare i file
+                exp_reports_dir=exp_reports_dir  # Specifica dove salvare i report
             )
 
             model_path_fold = os.path.join(exp_models_dir, f"best_model_fold_{fold + 1}.pkl")
@@ -874,6 +1002,8 @@ def main(args):
         # Il DataFrame df_test_holdout_normalized è già stato normalizzato correttamente all'inizio.
         # Ora applichiamo la sliding window su di esso.
         X_test_list, Y_test_list = [], []
+        all_window_indices_test, all_consecutivity_test = [], []
+        global_window_id_test = 0
         temp_action_dir_test = os.path.join(data_path, "temp_actions_test")
         os.makedirs(temp_action_dir_test, exist_ok=True)
 
@@ -884,24 +1014,76 @@ def main(args):
             df_action_test.to_csv(temp_path_test, index=False)
             
             # Chiamiamo la stessa funzione di sliding window
-            X_w_test, Y_w_test, _, _, _ = sliding_window_on_data.process_csv(temp_path_test, 9, 100, 50)
+            X_w_test, Y_w_test, _,is_consecutive_test, win_indices_test = sliding_window_on_data.process_csv(temp_path_test, 9, 100, 50)
             
             X_test_list.append(X_w_test)
             Y_test_list.append(Y_w_test)
+            all_consecutivity_test.extend(is_consecutive_test)
+
+            # Ricrea i metadati dizionario anche per il set di test
+            for i in range(len(X_w_test)):
+                all_window_indices_test.append({
+                    'global_window_id': global_window_id_test, 
+                    'action_id': action_id, 
+                    'row_indices': win_indices_test[i].tolist()
+                })
+                global_window_id_test += 1
             
         shutil.rmtree(temp_action_dir_test) # Pulisce la cartella temporanea
         
         # Concatena i risultati per creare gli array finali del test set.
         X_test_final = np.concatenate(X_test_list, axis=0)
         Y_test_final = np.concatenate(Y_test_list, axis=0).flatten()
+        all_consecutivity_test = np.array(all_consecutivity_test)
         logger.info(f"Dati di test finali pronti: X_test_final.shape={X_test_final.shape}")
 
         # Applica lo STESSO remapping di etichette usato per il training.
         # È FONDAMENTALE usare lo stesso `label_mapping` per garantire coerenza.
         Y_test_final_mapped = np.array([label_mapping[y] for y in Y_test_final])
 
+        logger.info(f"Holdout test set prima del bilanciamento: X_test_holdout.shape={X_test_final.shape}")
+        
+        # APPLICA IL BILANCIAMENTO DELLE CLASSI
+        (X_balanced, Y_balanced, X_test_final, Y_test_final,
+         indices_balanced, indices_test_final, 
+         consec_balanced, consec_test_final) = balance_holdout_classes(
+            X_train=X, Y_train=Y_mapped, 
+            X_test=X_test_final, Y_test=Y_test_final,
+            all_window_indices_train=all_window_indices, 
+            all_window_indices_test=all_window_indices_test,
+            all_consecutivity_train=all_consecutivity, 
+            all_consecutivity_test=all_consecutivity_test,
+            percentage_to_move=0.15,  # Puoi renderlo un parametro
+            random_seed=args.random_state
+        )
+        
+        # Aggiorna le variabili con i dati bilanciati
+        X = X_balanced
+        Y_mapped = Y_balanced
+        all_window_indices = indices_balanced
+        all_consecutivity = consec_balanced
+        
+        # Log delle distribuzioni aggiornate
+        log_and_plot_distribution(
+            Y=Y_balanced, 
+            title_prefix="Training Set Dopo Bilanciamento Holdout",
+            toy_name=args.toy,
+            toy_mapping=toy_mapping,
+            save_dir=exp_figures_dir
+        )
+        
+        log_and_plot_distribution(
+            Y=Y_test_final,
+            title_prefix="Holdout Test Set Dopo Bilanciamento", 
+            toy_name=args.toy,
+            toy_mapping=toy_mapping,
+            save_dir=exp_figures_dir
+        )
+
         # Crea il DataLoader per il test finale.
-        test_dataset_final = HARDataset(X_test_final, Y_test_final_mapped)
+        test_dataset_final = HARDataset(X_test_final, Y_test_final_mapped, 
+                                window_indices=all_window_indices_test, 
+                                consecutivity=all_consecutivity_test)
         test_loader_final = DataLoader(test_dataset_final, batch_size=best_hyperparameters['batch_size'], collate_fn=collate_fn)
 
         logger.info("Valutazione finale del modello sul hold-out test set...")
