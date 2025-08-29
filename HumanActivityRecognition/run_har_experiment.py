@@ -14,6 +14,7 @@ from sklearn.utils.class_weight import compute_class_weight
 from collections import Counter
 from collections import defaultdict
 
+
 # Import da Optuna
 import optuna
 from optuna.pruners import MedianPruner
@@ -584,7 +585,12 @@ def main(args):
     os.makedirs(exp_models_dir, exist_ok=True)
     os.makedirs(exp_figures_dir, exist_ok=True)
     os.makedirs(exp_reports_dir, exist_ok=True)
+
+    logs_dir = os.path.join(os.getcwd(), "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    log_file_path = os.path.join(logs_dir, f"{exp_name}.log")
     logger.info(f"===== INIZIO ESPERIMENTO: {exp_name} =====")
+
 
     data_path = "C:\\codes\\HumanActivityRecognition\\data\\downstream_data"
     df_toy, toy_mapping = load_and_preprocess_data(args.toy, data_path)
