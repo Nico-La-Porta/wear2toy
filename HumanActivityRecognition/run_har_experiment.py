@@ -1,3 +1,4 @@
+from email import parser
 import os
 import sys
 import argparse
@@ -25,13 +26,23 @@ import sliding_window_on_data
 from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn
 import train_with_cm
 import normalization
+from utils.log_config import setup_logging, logger
 from utils.focal_loss import FocalLoss, LabelSmoothingCrossEntropy, WeightedCrossEntropyLoss, CombinedLoss
-from utils.log_config import logger
 from utils.figures import combine_kfold_confusion_matrices
 from utils import mapping_activity
 from utils.transformations import *
 from utils.transformations_utils import *
+from utils.zupt import zupt_detect
 
+
+
+import sys
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from collections import defaultdict
+from utils.zupt import zupt_detect
+from utils.log_config import logger
 
 
 # FUNZIONE DI DOWNSAMPLING SELETTIVO
@@ -232,7 +243,8 @@ def balance_holdout_classes(X_train, Y_train, X_test, Y_test,
     # Aggiorna training set (rimuove finestre spostate)
     X_train_updated = X_train[mask_keep]
     Y_train_updated = Y_train[mask_keep]
-    indices_train_updated = [all_window_indices_train[i] for i in range(len(all_window_indices_train)) if mask_keep[i]]
+    all_window_indices_train_array = np.array(all_window_indices_train, dtype=object)
+    indices_train_updated = all_window_indices_train_array[mask_keep].tolist()
     consec_train_updated = all_consecutivity_train[mask_keep]
     
     # Aggiorna test set (aggiunge finestre spostate)
@@ -453,6 +465,14 @@ def parse_args():
     parser.add_argument('--n-trials', type=int, default=50, help='Numero di trial per la ricerca iperparametri con Optuna.')
     parser.add_argument('--random-state', type=int, default=42, help='Seed per la riproducibilità.')
 
+    # Parametri ZUPT
+    parser.add_argument('--enable-zupt', action='store_true', 
+                    help='Abilita il filtraggio ZUPT delle finestre.')
+    parser.add_argument('--zupt-threshold', type=float, default=0.5,
+                    help='Soglia percentuale per eliminare finestre con pause (default: 0.5 = 50%).')
+    parser.add_argument('--zupt-plot', action='store_true', default=True,
+                    help='Plotta le finestre da rimuovere per verifica visiva.')
+
     return parser.parse_args()
 
 
@@ -532,7 +552,8 @@ def configure_model_for_tuning(model, tuning_strategy, num_classes):
 
 def load_and_preprocess_data(toy_name, data_path):
     """
-    Carica e pre-elabora i dati per un giocattolo specifico.
+    Carica e pre-elabora i dati per un giocattolo specifico, aggiungendo l'ID della riga originale e il nome del file
+    per tracciare la consecutività.
     """
     logger.info(f"Caricamento e pre-elaborazione per il giocattolo: {toy_name}")
     
@@ -545,7 +566,7 @@ def load_and_preprocess_data(toy_name, data_path):
     }
     
     config = toy_configs[toy_name]
-    final_csv_path = os.path.join(data_path, f'df_{config["prefix"] if "prefix" in config else "ELEP"}_non_null.csv')
+    """final_csv_path = os.path.join(data_path, f'df_{config["prefix"] if "prefix" in config else "ELEP"}_non_null.csv')
 
     if os.path.exists(final_csv_path):
         df_toy = pd.read_csv(final_csv_path)
@@ -566,7 +587,58 @@ def load_and_preprocess_data(toy_name, data_path):
         df_toy = df_toy[~df_toy['action_id'].isin(config['classes_to_remove'])]
         
 
+    return df_toy, config['mapping']"""
+
+    files = []
+    if 'prefixes' in config:
+        for p in config['prefixes']:
+            files.extend(glob.glob(os.path.join(data_path, f"*_{p}*.csv")))
+    else:
+        files = glob.glob(os.path.join(data_path, f"*_{config['prefix']}*.csv"))
+        
+    df_list = []
+    for file in files:
+        df_single_file = pd.read_csv(file)
+        # Aggiungo il nome del file e l'indice di riga originale
+        df_single_file['original_file'] = os.path.basename(file)
+        df_single_file['original_row_id'] = df_single_file.index
+        df_list.append(df_single_file)
+        
+    df_toy = pd.concat(df_list, ignore_index=True)
+    df_toy = df_toy[df_toy['action_id'] != 0] # Filtra le azioni nulle
+
+    if config['classes_to_remove']:
+        df_toy = df_toy[~df_toy['action_id'].isin(config['classes_to_remove'])]
+        
     return df_toy, config['mapping']
+
+def add_consecutive_segment_id(df):
+    """
+    Aggiunge una colonna 'consecutive_segment_id' basata su file originale,
+    action_id e consecutività del 'original_row_id'.
+    """
+    logger.info("Identificazione dei segmenti di attività consecutivi...")
+    
+    # Assicura che il DataFrame sia ordinato correttamente per la logica di 'shift'
+    df = df.sort_values(by=['original_file', 'original_row_id']).reset_index(drop=True)
+
+    # Un nuovo segmento inizia se:
+    # 1. Cambia il file originale
+    # 2. Cambia l'action_id
+    # 3. C'è un "salto" nel numero di riga originale (es. da 20 a 40)
+    is_new_segment = (
+        (df['original_file'] != df['original_file'].shift(1)) |
+        (df['action_id'] != df['action_id'].shift(1)) |
+        (df['original_row_id'] != df['original_row_id'].shift(1) + 1)
+    )
+    
+    # Usa cumsum() per assegnare un ID univoco a ogni blocco consecutivo
+    df['consecutive_segment_id'] = is_new_segment.cumsum()
+    
+    logger.info(f"Trovati {df['consecutive_segment_id'].nunique()} segmenti unici.")
+    return df
+
+
 
 
 
@@ -578,6 +650,7 @@ def main(args):
         f"T{args.toy}_PTN{args.pt_norm}_PTA{args.pt_aug}_"
         f"FTN{args.ft_norm}_FTA{args.ft_aug}_TS{args.tuning_strategy}"
     )
+    setup_logging(exp_name)
     # Crea cartelle specifiche per questo esperimento
     exp_models_dir = os.path.join(MODELS_DIR, exp_name)
     exp_figures_dir = os.path.join(FIGURES_DIR, exp_name)
@@ -586,14 +659,13 @@ def main(args):
     os.makedirs(exp_figures_dir, exist_ok=True)
     os.makedirs(exp_reports_dir, exist_ok=True)
 
-    logs_dir = os.path.join(os.getcwd(), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-    log_file_path = os.path.join(logs_dir, f"{exp_name}.log")
     logger.info(f"===== INIZIO ESPERIMENTO: {exp_name} =====")
 
 
     data_path = "C:\\codes\\HumanActivityRecognition\\data\\downstream_data"
     df_toy, toy_mapping = load_and_preprocess_data(args.toy, data_path)
+    logger.info(f"COLONNE SUBITO DOPO IL CARICAMENTO: {df_toy.columns.tolist()}")
+    df_toy = add_consecutive_segment_id(df_toy)
     logger.info(f"Classi presenti dopo il filtraggio: {df_toy['action_id'].unique()}")
 
     # --- Hold-out set per bambini specifici --- 
@@ -631,10 +703,13 @@ def main(args):
         df_normalized = df_train_val
         if args.holdout_kids:
             df_test_holdout_normalized = df_test_holdout
+    
+    logger.info(f"COLONNE DOPO LA NORMALIZZAZIONE: {df_normalized.columns.tolist()}")
 
     # --- Salvataggio file per azione e Sliding Window ---
     logger.info("Salvataggio file per azione e applicazione sliding window...")
-    X_list, Y_list, all_window_indices, all_consecutivity, kid_action_counts = [], [], [], [], defaultdict(dict)
+    X_list, Y_list, all_consecutivity, all_windows_metadata_raw ,kid_action_counts = [], [], [], [], defaultdict(dict)
+    temp_csv_paths = [] #Per tracciare i path dei CSV temporanei
     global_window_id = 0
     
     temp_action_dir = os.path.join(data_path, "temp_actions")
@@ -645,11 +720,13 @@ def main(args):
         temp_path = os.path.join(temp_action_dir, f'df_{args.toy}_action_{action_id}.csv')
         df_action.to_csv(temp_path, index=False)
         logger.debug(f"Salvato file temporaneo: {temp_path}")
+        temp_csv_paths.append(temp_path)
 
-        X_w, Y_w, kid_dict, is_consecutive, win_indices = sliding_window_on_data.process_csv(
+        X_w, Y_w, kid_dict, is_consecutive, window_metadata = sliding_window_on_data.new_process_csv(
             temp_path, 9, 100, 50
         )
         X_list.append(X_w); Y_list.append(Y_w); all_consecutivity.extend(is_consecutive)
+        all_windows_metadata_raw.extend(window_metadata)
 
         logger.info(f"Numero totale di finestre per l'azione {action_id}: {len(X_w)}")
         logger.info(f"Finestre consecutive per l'azione {action_id}: {sum(is_consecutive)}")
@@ -657,16 +734,22 @@ def main(args):
         logger.info(f"Numero  totale di finestre per l'azione {action_id}:{len(X_w)}")
         kid_action_counts[f"{args.toy}_action_{action_id}"] = kid_dict #dizionario principale per tenere traccia del numero di finestre per ogni bambino per ogni azione, ogni spoon_action è una chiave e il valore è un dizionario con il numero di finestre per ogni bambino
         logger.info(f"Contenuto finale di kid_action_counts: {kid_action_counts}") #per vedere quante finestre per ogni azione e per ogni bambino sono state elaborte 
-        for i in range(len(X_w)):
-            all_window_indices.append({'global_window_id': global_window_id, 'action_id': action_id, 'row_indices': win_indices[i].tolist()})
-            global_window_id += 1
             
-    
+
+
     shutil.rmtree(temp_action_dir) # Pulisce la cartella temporanea
 
     X = np.concatenate(X_list, axis=0)
     Y = np.concatenate(Y_list, axis=0).flatten()
     all_consecutivity = np.array(all_consecutivity)
+
+    all_window_indices = []
+    for i, meta in enumerate(all_windows_metadata_raw):
+        all_window_indices.append({
+            'global_window_id': i,
+            'action_id': meta['action_id'],
+            'row_indices': meta['row_indices']
+        })
 
     log_and_plot_distribution(
     Y=Y,
@@ -674,7 +757,100 @@ def main(args):
     toy_name=args.toy,
     toy_mapping=toy_mapping,
     save_dir=exp_figures_dir
-)
+    )
+
+        #  APPLICAZIONE DEL FILTRAGGIO ZUPT (SE ABILITATO)  
+    # =============================================================================
+    if hasattr(args, 'enable_zupt') and args.enable_zupt:
+        logger.info("=== ANALISI ZUPT COMPLETA ===")
+        
+        
+        # Step 1: Analisi completa come nel notebook
+        pause_analysis, mapping_results = run_complete_zupt_analysis(
+            data_path=data_path,
+            toy_name=args.toy,
+            window_metadata=all_windows_metadata_raw,
+            pause_threshold=args.zupt_threshold,
+            plot_results=True,
+            save_plots=True,
+            figures_dir=exp_figures_dir
+        )
+        
+        # Step 2: Applica il filtraggio se ci sono finestre da rimuovere
+        if mapping_results and mapping_results['windows_to_remove']:
+            windows_to_remove = set(mapping_results['windows_to_remove'])
+            indices_to_keep = [i for i in range(len(X)) if i not in windows_to_remove]
+            
+            logger.info(f"Applicazione filtraggio: {len(windows_to_remove)} finestre rimosse")
+            
+            # Filtra i dati
+            X = X[indices_to_keep]
+            Y = Y[indices_to_keep] 
+            all_consecutivity = all_consecutivity[indices_to_keep]
+            all_windows_metadata_raw = [all_windows_metadata_raw[i] for i in indices_to_keep]
+            all_window_indices = [all_window_indices[i] for i in indices_to_keep]
+
+
+            # Ricalcola kid_action_counts in base ai metadati filtrati
+            logger.info("Ricalcolo kid_action_counts dopo filtraggio ZUPT...")
+            old_counts = dict(kid_action_counts)
+            kid_action_counts = defaultdict(dict)
+
+            # Raggruppa per action_id e conta per kid_id
+            action_groups = defaultdict(list)
+            for meta in all_windows_metadata_raw:
+                action_id = meta.get('action_id', 'unknown')
+                action_groups[action_id].append(meta)
+            
+            for action_id, metadata_list in action_groups.items():
+                kid_counts = defaultdict(int)
+                for meta in metadata_list:
+                    kid_id = meta.get('kid_id', 'unknown')
+                    kid_counts[kid_id] += 1
+
+                original_action_key = f"{args.toy}_action_{action_id}"
+                kid_action_counts[original_action_key] = dict(kid_counts)
+
+
+            # Log delle modifiche
+            for action_id in old_counts:
+                if action_id in kid_action_counts:
+                    old_total = sum(old_counts[action_id].values())
+                    new_total = sum(kid_action_counts[action_id].values())
+                    logger.info(f"  {action_id}: {old_total} -> {new_total} finestre ({old_total - new_total} rimosse)")
+                else:
+                    old_total = sum(old_counts[action_id].values())
+                    logger.info(f"  {action_id}: {old_total} -> 0 finestre (azione completamente rimossa)")
+
+            # Log delle modifiche
+            for action_id in old_counts:
+                if action_id in kid_action_counts:
+                    old_total = sum(old_counts[action_id].values())
+                    new_total = sum(kid_action_counts[action_id].values())
+                    logger.info(f"  {action_id}: {old_total} -> {new_total} finestre ({old_total - new_total} rimosse)")
+                else:
+                    old_total = sum(old_counts[action_id].values())
+                    logger.info(f"  {action_id}: {old_total} -> 0 finestre (azione completamente rimossa)")
+            
+            logger.info(f"Dati filtrati: X.shape={X.shape}")
+
+            # Ri-plotta la distribuzione dopo il filtraggio
+            log_and_plot_distribution(
+                Y=Y,
+                title_prefix="Distribuzione Dopo Filtraggio ZUPT",
+                toy_name=args.toy,
+                toy_mapping=toy_mapping,
+                save_dir=exp_figures_dir
+            )
+
+
+
+        else:
+            logger.info("Nessuna finestra da rimuovere in base alla soglia ZUPT")
+    else:
+        logger.info("ZUPT filtering non abilitato.")
+    
+
 
     # =============================================================================
     #  APPLICAZIONE DEL DOWNSAMPLING SELETTIVO
@@ -690,12 +866,27 @@ def main(args):
         for kid_id, window_count in kid_dict.items():
             labels = Y[current_idx: current_idx + window_count]
             
-            if not all(str(lab) in action_key for lab in labels):
+            # Gestisci sia il caso stringa che intero per action_key
+            if isinstance(action_key, str) and '_action_' in action_key:
+                action_id = int(action_key.split('_action_')[-1])
+            elif isinstance(action_key, (int, float)):
+                action_id = int(action_key)
+            else:
+                print(f"Formato action_key non riconosciuto: {action_key} (tipo: {type(action_key)})")
+                current_idx += window_count
+                continue
+                
+            # Verifica corrispondenza
+            if not all(int(lab) == action_id for lab in labels):
                 print(f"Mismatch trovato per {action_key}-{kid_id}")
+                print(f"  Action ID atteso: {action_id}, Etichette: {set(labels)}")
             
             current_idx += window_count
 
     print("Controllo completato")
+
+
+
     # Applica la funzione solo se il giocattolo corrente è nella lista target
     # La funzione stessa si occuperà di tutto e aggiornerà le variabili X, Y e kid_action_counts
     X, Y, kid_action_counts = selective_downsampling_by_padding(
@@ -704,6 +895,8 @@ def main(args):
         max_windows_per_kid_action=MAX_WINDOWS_PER_KID_ACTION,
         toys_to_downsample=TARGET_TOYS_FOR_DOWNSAMPLING
     )
+
+
     # =============================================================================
 
     log_and_plot_distribution(
@@ -739,6 +932,92 @@ def main(args):
 
     if args.holdout_kids:
         logger.info("AVVIO PROCEDURA: K-Fold su Train/Val set + Valutazione finale su Hold-out")
+
+        
+        logger.info("Preparazione del hold-out test...")
+
+        # Il DataFrame df_test_holdout_normalized è già stato normalizzato correttamente all'inizio.
+        # Ora applichiamo la sliding window su di esso.
+        X_test_list, Y_test_list = [], []
+        all_window_indices_test, all_consecutivity_test = [], []
+        global_window_id_test = global_window_id
+        temp_action_dir_test = os.path.join(data_path, "temp_actions_test")
+        os.makedirs(temp_action_dir_test, exist_ok=True)
+
+        logger.info("Applicazione Sliding Window sul set di hold-out test...")
+        for action_id in df_test_holdout_normalized['action_id'].unique():
+            df_action_test = df_test_holdout_normalized[df_test_holdout_normalized['action_id'] == action_id]
+            temp_path_test = os.path.join(temp_action_dir_test, f'df_test_{args.toy}_action_{action_id}.csv')
+            df_action_test.to_csv(temp_path_test, index=False)
+            
+            # Chiamiamo la stessa funzione di sliding window
+            X_w_test, Y_w_test, _,is_consecutive_test, win_indices_test = sliding_window_on_data.new_process_csv(temp_path_test, 9, 100, 50)
+            
+            X_test_list.append(X_w_test)
+            Y_test_list.append(Y_w_test)
+            all_consecutivity_test.extend(is_consecutive_test)
+
+            # Ricrea i metadati dizionario anche per il set di test
+            for i in range(len(X_w_test)):
+                all_window_indices_test.append({
+                    'global_window_id': global_window_id_test, 
+                    'action_id': action_id, 
+                    'row_indices': win_indices_test[i]['row_indices']
+                })
+                global_window_id_test += 1
+            
+        shutil.rmtree(temp_action_dir_test) # Pulisce la cartella temporanea
+        
+        # Concatena i risultati per creare gli array finali del test set.
+        X_test_final = np.concatenate(X_test_list, axis=0)
+        Y_test_final = np.concatenate(Y_test_list, axis=0).flatten()
+        all_consecutivity_test = np.array(all_consecutivity_test)
+        logger.info(f"Dati di test finali pronti: X_test_final.shape={X_test_final.shape}")
+
+        # Applica lo STESSO remapping di etichette usato per il training.
+        Y_test_final_mapped = np.array([label_mapping[y] for y in Y_test_final])
+
+
+
+        logger.info(f"Holdout test set prima del bilanciamento: X_test_holdout.shape={X_test_final.shape}")
+        logger.info(f"Y_train dtypes: {Y_mapped.dtype}, Y_test dtypes: {Y_test_final_mapped.dtype}")
+        logger.info(f"Y_train sample: {Y_mapped[:5]}, Y_test sample: {Y_test_final_mapped[:5]}")
+        # APPLICA IL BILANCIAMENTO DELLE CLASSI
+        (X_balanced, Y_balanced, X_test_final, Y_test_mapped_balanced,
+        indices_balanced, indices_test_final, 
+        consec_balanced, consec_test_final) = balance_holdout_classes(
+            X_train=X, Y_train=Y_mapped, 
+            X_test=X_test_final, Y_test=Y_test_final_mapped,
+            all_window_indices_train=all_window_indices[:len(X)],  # <-- usa solo i metadati delle finestre di training
+            all_window_indices_test=all_window_indices_test,
+            all_consecutivity_train=all_consecutivity[:len(X)],
+            all_consecutivity_test=all_consecutivity_test,
+            percentage_to_move=0.15,
+            random_seed=args.random_state
+        )
+        
+        # Aggiorna le variabili con i dati bilanciati
+        X = X_balanced
+        Y_mapped = Y_balanced
+        all_window_indices = indices_balanced
+        all_consecutivity = consec_balanced
+        
+        # Log delle distribuzioni aggiornate
+        log_and_plot_distribution(
+            Y=Y_balanced, 
+            title_prefix="Training Set Dopo Bilanciamento Holdout",
+            toy_name=args.toy,
+            toy_mapping=toy_mapping,
+            save_dir=exp_figures_dir
+        )
+        
+        log_and_plot_distribution(
+            Y=Y_test_final,
+            title_prefix="Holdout Test Set Dopo Bilanciamento", 
+            toy_name=args.toy,
+            toy_mapping=toy_mapping,
+            save_dir=exp_figures_dir
+        )
         
         skf = StratifiedKFold(n_splits=args.k_folds, shuffle=True, random_state=args.random_state)
         all_fold_scores = []
@@ -855,6 +1134,7 @@ def main(args):
                     save_plots=False 
                 )
                 return best_f1
+            
             # Ottimizzazione per questo fold
             logger.info(f"Inizio ottimizzazione iperparametri per fold {fold + 1}")
             study = optuna.create_study(direction='maximize', pruner=MedianPruner())
@@ -882,7 +1162,6 @@ def main(args):
             logger.info(f"Val dataset size: {len(val_dataset)}")
             logger.info(f"Test dataset size: {len(test_dataset)}")
             
-
             # Conta quanti batch effettivi
             train_batches = len(train_loader_final)
             val_batches = len(val_loader_final)
@@ -897,17 +1176,17 @@ def main(args):
             logger.info(f"Val batches: {val_batches} (finestre usate: {val_samples_used}/{len(val_dataset)})")
             logger.info(f"Test batches: {test_batches} (finestre usate: {test_samples_used}/{len(test_dataset)})")
 
-            logger.info("Inizio training finale per il fold con i migliori iperparametri...")
-            train_with_cm.train(net=model_final_fold, 
-                train_loader=train_loader_final, 
-                val_loader=val_loader_final,
-                exp_figures_dir=exp_figures_dir,
-                exp_reports_dir=exp_reports_dir,
-                epochs=args.epochs, 
-                lr=best_params_fold['lr'],
-                figure_name=f"training_fold_{fold+1}", 
-                save_plots=True
-            )
+            # logger.info("Inizio training finale per il fold con i migliori iperparametri...")  # TODO non ritrainare a questo livello
+            # train_with_cm.train(net=model_final_fold, 
+            #     train_loader=train_loader_final, 
+            #     val_loader=val_loader_final,
+            #     exp_figures_dir=exp_figures_dir,
+            #     exp_reports_dir=exp_reports_dir,
+            #     epochs=args.epochs, 
+            #     lr=best_params_fold['lr'],
+            #     figure_name=f"training_fold_{fold+1}", 
+            #     save_plots=True
+            # )
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -967,7 +1246,7 @@ def main(args):
         final_model = configure_model_for_tuning(final_model, args.tuning_strategy, num_classes)
 
         #addestro modello finale
-        train_with_cm.train(net=final_model, 
+        train_with_cm.train(net=final_model, # TODO: farsi restituire il modello per salvarlo alla riga sotto
             train_loader=final_train_loader, 
             val_loader=None, 
             exp_figures_dir=exp_figures_dir,
@@ -1003,93 +1282,10 @@ def main(args):
             labels_dict=labels_dict
         )
 
-        logger.info("Preparazione del hold-out test set per la valutazione finale...")
-
-        # Il DataFrame df_test_holdout_normalized è già stato normalizzato correttamente all'inizio.
-        # Ora applichiamo la sliding window su di esso.
-        X_test_list, Y_test_list = [], []
-        all_window_indices_test, all_consecutivity_test = [], []
-        global_window_id_test = 0
-        temp_action_dir_test = os.path.join(data_path, "temp_actions_test")
-        os.makedirs(temp_action_dir_test, exist_ok=True)
-
-        logger.info("Applicazione Sliding Window sul set di hold-out test...")
-        for action_id in df_test_holdout_normalized['action_id'].unique():
-            df_action_test = df_test_holdout_normalized[df_test_holdout_normalized['action_id'] == action_id]
-            temp_path_test = os.path.join(temp_action_dir_test, f'df_test_{args.toy}_action_{action_id}.csv')
-            df_action_test.to_csv(temp_path_test, index=False)
-            
-            # Chiamiamo la stessa funzione di sliding window
-            X_w_test, Y_w_test, _,is_consecutive_test, win_indices_test = sliding_window_on_data.process_csv(temp_path_test, 9, 100, 50)
-            
-            X_test_list.append(X_w_test)
-            Y_test_list.append(Y_w_test)
-            all_consecutivity_test.extend(is_consecutive_test)
-
-            # Ricrea i metadati dizionario anche per il set di test
-            for i in range(len(X_w_test)):
-                all_window_indices_test.append({
-                    'global_window_id': global_window_id_test, 
-                    'action_id': action_id, 
-                    'row_indices': win_indices_test[i].tolist()
-                })
-                global_window_id_test += 1
-            
-        shutil.rmtree(temp_action_dir_test) # Pulisce la cartella temporanea
-        
-        # Concatena i risultati per creare gli array finali del test set.
-        X_test_final = np.concatenate(X_test_list, axis=0)
-        Y_test_final = np.concatenate(Y_test_list, axis=0).flatten()
-        all_consecutivity_test = np.array(all_consecutivity_test)
-        logger.info(f"Dati di test finali pronti: X_test_final.shape={X_test_final.shape}")
-
-        # Applica lo STESSO remapping di etichette usato per il training.
-        # È FONDAMENTALE usare lo stesso `label_mapping` per garantire coerenza.
-        Y_test_final_mapped = np.array([label_mapping[y] for y in Y_test_final])
-
-        logger.info(f"Holdout test set prima del bilanciamento: X_test_holdout.shape={X_test_final.shape}")
-        
-        # APPLICA IL BILANCIAMENTO DELLE CLASSI
-        (X_balanced, Y_balanced, X_test_final, Y_test_final,
-         indices_balanced, indices_test_final, 
-         consec_balanced, consec_test_final) = balance_holdout_classes(
-            X_train=X, Y_train=Y_mapped, 
-            X_test=X_test_final, Y_test=Y_test_final,
-            all_window_indices_train=all_window_indices, 
-            all_window_indices_test=all_window_indices_test,
-            all_consecutivity_train=all_consecutivity, 
-            all_consecutivity_test=all_consecutivity_test,
-            percentage_to_move=0.15,  # Puoi renderlo un parametro
-            random_seed=args.random_state
-        )
-        
-        # Aggiorna le variabili con i dati bilanciati
-        X = X_balanced
-        Y_mapped = Y_balanced
-        all_window_indices = indices_balanced
-        all_consecutivity = consec_balanced
-        
-        # Log delle distribuzioni aggiornate
-        log_and_plot_distribution(
-            Y=Y_balanced, 
-            title_prefix="Training Set Dopo Bilanciamento Holdout",
-            toy_name=args.toy,
-            toy_mapping=toy_mapping,
-            save_dir=exp_figures_dir
-        )
-        
-        log_and_plot_distribution(
-            Y=Y_test_final,
-            title_prefix="Holdout Test Set Dopo Bilanciamento", 
-            toy_name=args.toy,
-            toy_mapping=toy_mapping,
-            save_dir=exp_figures_dir
-        )
-
         # Crea il DataLoader per il test finale.
-        test_dataset_final = HARDataset(X_test_final, Y_test_final_mapped, 
-                                window_indices=all_window_indices_test, 
-                                consecutivity=all_consecutivity_test)
+        test_dataset_final = HARDataset(X_test_final, Y_test_mapped_balanced, 
+                                window_indices=indices_test_final, 
+                                consecutivity=consec_test_final)
         test_loader_final = DataLoader(test_dataset_final, batch_size=best_hyperparameters['batch_size'], collate_fn=collate_fn)
 
         logger.info("Valutazione finale del modello sul hold-out test set...")
@@ -1228,6 +1424,7 @@ def main(args):
                     save_plots=False 
                 )
                 return best_f1
+            
             # Ottimizzazione per questo fold
             logger.info(f"Inizio ottimizzazione iperparametri per fold {fold + 1}")
             study = optuna.create_study(direction='maximize', pruner=MedianPruner())

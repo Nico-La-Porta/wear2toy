@@ -20,7 +20,7 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 62,8,8,1,True,drive,drive
 63,8,8,1,True,drive,drive
 64,8,8,0,True,drive,drive
-66,8,9,1,False,drive,move
+66,8,4,1,False,drive,hold
 67,8,8,1,True,drive,drive
 70,8,8,1,True,drive,drive
 72,8,4,1,False,drive,hold
@@ -40,7 +40,7 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 110,8,8,0,True,drive,drive
 113,8,8,0,True,drive,drive
 115,8,8,1,True,drive,drive
-120,8,4,0,False,drive,hold
+120,8,8,0,True,drive,drive
 121,8,4,1,False,drive,hold
 124,8,4,0,False,drive,hold
 125,8,8,1,True,drive,drive
@@ -59,7 +59,7 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 166,8,8,1,True,drive,drive
 168,8,8,1,True,drive,drive
 171,8,8,1,True,drive,drive
-173,8,8,1,True,drive,drive
+173,8,4,1,False,drive,hold
 178,8,8,0,True,drive,drive
 184,8,8,1,True,drive,drive
 185,8,8,1,True,drive,drive
@@ -84,9 +84,9 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 248,8,8,1,True,drive,drive
 250,8,4,0,False,drive,hold
 252,6,8,1,False,stack,drive
-253,6,8,0,False,stack,drive
+253,6,4,0,False,stack,hold
 254,6,8,0,False,stack,drive
-256,6,8,1,False,stack,drive
+256,6,4,1,False,stack,hold
 260,6,8,0,False,stack,drive
 266,6,4,0,False,stack,hold
 273,6,4,1,False,stack,hold
@@ -94,7 +94,7 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 276,6,8,1,False,stack,drive
 281,6,4,1,False,stack,hold
 283,6,4,1,False,stack,hold
-287,6,4,0,False,stack,hold
+287,6,8,0,False,stack,drive
 296,0,8,1,False,put down,drive
 297,0,8,1,False,put down,drive
 298,0,8,1,False,put down,drive
@@ -116,7 +116,7 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 346,0,4,1,False,put down,hold
 352,0,4,1,False,put down,hold
 353,0,4,1,False,put down,hold
-354,0,8,1,False,put down,drive
+354,0,4,1,False,put down,hold
 355,0,8,1,False,put down,drive
 356,9,4,1,False,move,hold
 357,9,4,1,False,move,hold
@@ -131,10 +131,10 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 403,9,8,1,False,move,drive
 405,9,4,0,False,move,hold
 407,9,8,1,False,move,drive
-410,9,8,1,False,move,drive
+410,9,4,1,False,move,hold
 411,9,4,1,False,move,hold
 413,9,8,1,False,move,drive
-414,9,8,1,False,move,drive
+414,9,4,1,False,move,hold
 415,9,4,0,False,move,hold
 418,9,8,1,False,move,drive
 420,9,8,1,False,move,drive
@@ -142,7 +142,7 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 429,9,8,1,False,move,drive
 431,9,8,1,False,move,drive
 433,9,8,1,False,move,drive
-437,9,8,1,False,move,drive
+437,9,4,1,False,move,hold
 439,9,8,1,False,move,drive
 440,9,8,1,False,move,drive
 441,9,4,1,False,move,hold
@@ -156,9 +156,9 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 467,4,4,1,True,hold,hold
 468,4,4,1,True,hold,hold
 469,4,4,1,True,hold,hold
-474,4,8,0,False,hold,drive
-475,4,8,1,False,hold,drive
-476,4,8,1,False,hold,drive
+474,4,4,0,True,hold,hold
+475,4,4,1,True,hold,hold
+476,4,4,1,True,hold,hold
 480,4,4,1,True,hold,hold
 481,4,8,1,False,hold,drive
 484,4,8,1,False,hold,drive
@@ -167,14 +167,14 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 490,4,8,1,False,hold,drive
 493,4,4,1,True,hold,hold
 494,4,4,1,True,hold,hold
-497,4,8,1,False,hold,drive
+497,4,4,1,True,hold,hold
 500,4,8,1,False,hold,drive
 501,4,8,1,False,hold,drive
 505,4,4,1,True,hold,hold
 508,4,8,1,False,hold,drive
 509,4,4,1,True,hold,hold
 517,4,8,0,False,hold,drive
-518,4,9,0,False,hold,move
+518,4,4,0,True,hold,hold
 519,4,4,1,True,hold,hold
 526,4,8,1,False,hold,drive
 527,4,8,1,False,hold,drive
@@ -209,12 +209,12 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 620,4,8,1,False,hold,drive
 621,4,4,1,True,hold,hold
 624,4,4,1,True,hold,hold
-626,4,8,0,False,hold,drive
+626,4,4,0,True,hold,hold
 627,4,4,0,True,hold,hold
 629,4,8,1,False,hold,drive
 631,4,4,1,True,hold,hold
 633,4,8,1,False,hold,drive
-648,4,8,1,False,hold,drive
+648,4,4,1,True,hold,hold
 651,4,4,1,True,hold,hold
 652,4,4,1,True,hold,hold
 653,4,4,1,True,hold,hold
@@ -222,9 +222,9 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 657,4,8,1,False,hold,drive
 663,4,8,1,False,hold,drive
 665,4,4,1,True,hold,hold
-666,4,8,1,False,hold,drive
+666,4,4,1,True,hold,hold
 673,4,8,1,False,hold,drive
-675,4,9,1,False,hold,move
+675,4,4,1,True,hold,hold
 677,4,8,1,False,hold,drive
 679,4,8,1,False,hold,drive
 683,4,8,1,False,hold,drive
@@ -256,7 +256,7 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 770,3,4,0,False,turn,hold
 773,3,4,1,False,turn,hold
 778,3,4,0,False,turn,hold
-779,3,8,0,False,turn,drive
+779,3,4,0,False,turn,hold
 780,3,8,1,False,turn,drive
 781,3,8,1,False,turn,drive
 784,3,4,1,False,turn,hold
@@ -272,7 +272,7 @@ global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,p
 812,5,8,1,False,flip,drive
 813,5,8,1,False,flip,drive
 819,5,4,1,False,flip,hold
-828,5,9,1,False,flip,move
+828,5,4,1,False,flip,hold
 829,5,4,1,False,flip,hold
 833,5,8,1,False,flip,drive
 834,5,4,1,False,flip,hold

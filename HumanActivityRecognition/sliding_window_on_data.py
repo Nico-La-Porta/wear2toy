@@ -68,7 +68,7 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
     df = pd.read_csv(file_path)
     logger.debug(f"sto leggendo il file csv: {file_path}")
     #logger.debug("Colonne nel dataset:", df.columns.tolist())
-
+    
     kid_ids = df['kid_id'].unique() # Prendo gli id dei bambini e li metto in una lista
     print(">>> Kid_ids:", kid_ids)
     X, Y, = [], [] 
@@ -88,6 +88,8 @@ def process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_wi
 
         # Estraggo i timestamp per questo bambino
         timestamps_kid = df[df['kid_id'] == kid_id]['Timestamp'].to_numpy()
+        # Estraggo gli original_row_id per questo bambino
+        original_row_ids = df[df['kid_id'] == kid_id]['original_row_id'].to_numpy()
         #stampa di debug per vedere quanti dati ho per ogni kid
         logger.info(f"Kid_id: {kid_id}, X_kid shape: {X_kid.shape}, Y_kid shape: {Y_kid.shape}")
 
@@ -252,3 +254,82 @@ def old_process_csv(file_path, nb_sensor_channels, sliding_window_length, slidin
     
     return X_windows, Y_windows
 
+
+
+
+
+def new_process_csv(file_path, nb_sensor_channels, sliding_window_length, sliding_window_step):
+    df = pd.read_csv(file_path)
+    logger.debug(f"Processo il file: {file_path}")
+
+    if 'consecutive_segment_id' not in df.columns:
+        logger.error("ERRORE: La colonna 'consecutive_segment_id' è mancante.")
+        return np.empty((0, sliding_window_length, nb_sensor_channels), dtype=np.float32), np.array([]), {}, np.array([]), []
+
+    X_all, Y_all, is_consecutive_all = [], [], []
+    window_metadata_all = [] # Lista per i metadati completi
+    kid_action_count = {}
+
+    for segment_id in df['consecutive_segment_id'].unique():
+        segment_df = df[df['consecutive_segment_id'] == segment_id].reset_index(drop=True)
+        kid_id = segment_df['kid_id'].iloc[0]
+        original_file_name = segment_df['original_file'].iloc[0]
+
+        columns_to_exclude = [
+            'Timestamp', 'Accel_WR_X', 'Accel_WR_Y', 'Accel_WR_Z', 'Date_time', 'action', 'action_id', 'G',
+            'communication', 'social_interaction', 'restricted_repetitive_behaviour',
+            'ados_total_score', 'I', 'E', 'toy_id', 'kid_id', 'original_file', 'original_row_id',
+            'consecutive_segment_id', 'window_ids', 'correct_windows', 'correct_summary', 'any_incorrect'
+        ]
+        feature_columns = df.columns.difference(columns_to_exclude)
+        segment_df[feature_columns] = segment_df[feature_columns].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+        X_segment = segment_df[feature_columns].to_numpy()
+        
+        Y_segment = segment_df['action_id'].to_numpy()
+        timestamps_segment = segment_df['Timestamp'].to_numpy()
+        original_row_ids_segment = segment_df['original_row_id'].to_numpy()
+
+        X_windows, _ = data_processing.sliding_window(X_segment, ws=(sliding_window_length, X_segment.shape[1]), ss=(sliding_window_step, X_segment.shape[1]), min_pad_samples=30, extreme_pad_samples=10)
+        
+        if X_windows.shape[0] == 0:
+            continue
+
+        Y_windows_full, _ = data_processing.sliding_window(Y_segment.reshape(-1, 1), ws=(sliding_window_length, 1), ss=(sliding_window_step, 1), min_pad_samples=30, extreme_pad_samples=10)
+        Y_windows = np.asarray([window[np.nonzero(window)[0][0]] if np.any(window != 0) else 0 for window in Y_windows_full])
+        
+        row_indices_for_sw = original_row_ids_segment.reshape(-1, 1)
+        row_windows, _ = data_processing.sliding_window(row_indices_for_sw, ws=(sliding_window_length, 1), ss=(sliding_window_step, 1))
+        row_windows = row_windows.squeeze(axis=2) if row_windows.ndim == 3 else row_windows
+        
+        consecutivity_info = calculate_window_consecutivity(timestamps_segment, sliding_window_length, sliding_window_step, len(X_windows))
+        
+        X_all.append(X_windows)
+        Y_all.append(Y_windows)
+        is_consecutive_all.extend(consecutivity_info)
+        
+        for i in range(len(X_windows)):
+            padding_rows = np.sum(np.all(X_windows[i] == 0, axis=1))
+            window_metadata_all.append({
+                'original_file': original_file_name,
+                'row_indices': row_windows[i].tolist(),
+                'kid_id': kid_id,
+                'padding_row_count': int(padding_rows),
+                'action_id': int(Y_windows[i])
+            })
+        
+        if int(kid_id) not in kid_action_count:
+            kid_action_count[int(kid_id)] = 0
+        kid_action_count[int(kid_id)] += len(Y_windows)
+
+    if not X_all:
+        logger.warning(f"Nessuna finestra generata dal file {file_path}")
+        return np.empty((0, sliding_window_length, nb_sensor_channels), dtype=np.float32), np.array([]), {}, np.array([]), []
+
+    X_final = np.concatenate(X_all, axis=0)
+    Y_final = np.concatenate(Y_all, axis=0)
+    is_consecutive_final = np.array(is_consecutive_all)
+
+    logger.debug(f"Conteggio finale di finestre per ogni bambino per l'azione: {kid_action_count}")
+    
+    # Restituisce i 5 valori corretti
+    return X_final, Y_final, kid_action_count, is_consecutive_final, window_metadata_all

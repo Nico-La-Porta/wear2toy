@@ -5,39 +5,41 @@ import json
 import os
 import sys
 
-# How to use :
-# in the beginning of the file :
-# import logging
-# log = logging.getLogger('myapp')
-# then use log to log whatever.
+def setup_logging(exp_name: str):
+    """
+    Configura il logging per salvare i log in un file specifico per l'esperimento.
 
-LOGGING_CONFIG = os.path.join(pathlib.Path(__file__).parent.resolve(), 'base_config.json')
+    Args:
+        exp_name (str): Il nome univoco dell'esperimento, usato per il nome del file di log.
+    """
+    LOGGING_CONFIG = os.path.join(pathlib.Path(__file__).parent.resolve(), 'base_config.json')
 
-with open(LOGGING_CONFIG, 'r') as fd:
-    log_config = json.load(fd)
-main_script = sys.argv[0]
-script_name = os.path.splitext(os.path.basename(main_script))[0]
-log_dir = os.path.join(pathlib.Path(__file__).parent.parent.resolve(), "logs")
-os.makedirs(log_dir, exist_ok=True)
-log_file_path = os.path.join(log_dir, f"{script_name}.log")
+    with open(LOGGING_CONFIG, 'r') as fd:
+        log_config = json.load(fd)
+    
+    # Crea la cartella dei log se non esiste
+    log_dir = os.path.join(pathlib.Path(__file__).parent.parent.resolve(), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # --- MODIFICA CHIAVE: Usa exp_name per il nome del file ---
+    log_file_path = os.path.join(log_dir, f"{exp_name}.log")
+    error_log_file_path = os.path.join(log_dir, f"{exp_name}_error.log")
 
-if 'file' in log_config['handlers']:
-    log_config['handlers']['file']['filename'] = log_file_path
+    # Aggiorna il dizionario di configurazione con i nuovi percorsi dei file
+    if 'file' in log_config['handlers']:
+        log_config['handlers']['file']['filename'] = log_file_path
+    
+    if 'error_file' in log_config['handlers']:
+        log_config['handlers']['error_file']['filename'] = error_log_file_path
 
+    # Applica la configurazione
+    logging.config.dictConfig(log_config)
+    
+    # Ottieni e restituisci il logger configurato
+    logger = logging.getLogger('myapp')
+    logger.info(f"Il logging è stato configurato. I log verranno salvati in: {log_file_path}")
+    return logger
 
-error_log_file_path = os.path.join(log_dir, f"{script_name}_error.log")
-if 'error_file' in log_config['handlers']: # Controlla se l'handler 'error_file' esiste
-    log_config['handlers']['error_file']['filename'] = error_log_file_path
-
-logging.config.dictConfig(log_config)
+# Manteniamo un logger di base per essere importato da altri moduli.
+# Sarà riconfigurato correttamente non appena setup_logging viene chiamato.
 logger = logging.getLogger('myapp')
-
-logger.info(f"Logging configured for {script_name} in {log_file_path}")
-
-
-if __name__ == "__main__":
-    log = logging.getLogger('myapp')
-    log.debug('debug')
-    log.info('info')
-    log.warning('warning')
-    log.critical('critical')
