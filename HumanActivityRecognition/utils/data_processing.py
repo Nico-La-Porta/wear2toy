@@ -77,7 +77,9 @@ def sliding_window(a, ws, ss=None, flatten=True, min_pad_samples=30, extreme_pad
         raise ValueError(f'a.shape, ws e ss devono avere la stessa lunghezza. Valori ricevuti: {ls}')
     
     padding_code_vector = []
-
+    if len(a) < extreme_pad_samples:
+        logger.warning(f"Segmento troppo piccolo ({len(a)} campioni < {extreme_pad_samples}). Segmento scartato.")
+        return np.array([]).reshape(0, ws[0], shape[1] if len(shape) > 1 else 1), []
     # Se la lunghezza della finestra è maggiore del  numero di campioni disponibili, aggiungo padding
     if np.any(ws > shape):
         logger.debug(f"La lunghezza della finestra è maggiore della lunghezza dell'array. Applico padding.")
@@ -87,8 +89,8 @@ def sliding_window(a, ws, ss=None, flatten=True, min_pad_samples=30, extreme_pad
             logger.warning("Non ci sono abbastanza campioni per creare una finestra valida. Campioni scartati.")
         else:
             num_padding = ws[0] - num_actual_samples  # Quantità di padding necessaria
-            padding_start = np.random.randint(1, num_padding) # Estraggo un numero casuale tra 1 e num_padding
-            padding_end = num_padding - padding_start
+            padding_start = num_padding // 2
+            padding_end   = num_padding - padding_start
             logger.info(f"Padding iniziale: {padding_start}, Padding finale: {padding_end}")
             # Aggiungo padding all'inizio e alla fine
             padded_samples = np.concatenate((np.zeros((padding_start,) + a.shape[1:]), a), axis=0) # Aggiungo padding all'inizio
@@ -130,7 +132,7 @@ def sliding_window(a, ws, ss=None, flatten=True, min_pad_samples=30, extreme_pad
     if remaining_samples > 0:
         if remaining_samples > extreme_pad_samples:
             num_padding = ws[0] - remaining_samples 
-            padding_start = np.random.randint(1, num_padding)
+            padding_start = num_padding // 2
             padding_end = num_padding - padding_start
             last_window = np.concatenate((a[-remaining_samples:], np.zeros((padding_end, a.shape[1]))), axis=0)
             last_window = np.concatenate((np.zeros((padding_start, a.shape[1])), last_window), axis=0)

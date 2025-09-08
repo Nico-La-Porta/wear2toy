@@ -1,0 +1,262 @@
+global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,predicted_action
+0,0,8,1,False,put down,drive
+2,0,8,1,False,put down,drive
+5,0,8,1,False,put down,drive
+9,0,8,1,False,put down,drive
+12,0,8,1,False,put down,drive
+21,0,8,1,False,put down,drive
+25,0,8,1,False,put down,drive
+27,0,4,1,False,put down,hold
+31,0,8,1,False,put down,drive
+32,0,4,1,False,put down,hold
+39,0,8,1,False,put down,drive
+42,0,8,1,False,put down,drive
+46,0,4,1,False,put down,hold
+47,0,8,1,False,put down,drive
+50,0,8,1,False,put down,drive
+55,0,4,1,False,put down,hold
+58,1,4,1,False,lift,hold
+59,1,4,1,False,lift,hold
+60,1,4,1,False,lift,hold
+69,1,4,1,False,lift,hold
+70,1,4,1,False,lift,hold
+81,1,4,1,False,lift,hold
+83,1,8,1,False,lift,drive
+84,1,4,1,False,lift,hold
+87,1,4,1,False,lift,hold
+92,1,4,1,False,lift,hold
+93,1,4,1,False,lift,hold
+99,2,8,1,False,lower,drive
+108,2,4,1,False,lower,hold
+111,3,4,1,False,turn,hold
+118,3,8,1,False,turn,drive
+120,3,4,1,False,turn,hold
+123,3,4,1,False,turn,hold
+129,3,8,1,False,turn,drive
+130,3,4,1,False,turn,hold
+142,3,4,1,False,turn,hold
+143,3,4,1,False,turn,hold
+145,3,4,1,False,turn,hold
+146,3,4,1,False,turn,hold
+147,3,4,1,False,turn,hold
+148,3,8,1,False,turn,drive
+149,3,8,1,False,turn,drive
+151,3,4,1,False,turn,hold
+154,3,8,1,False,turn,drive
+164,4,8,1,False,hold,drive
+170,4,4,1,True,hold,hold
+177,4,8,1,False,hold,drive
+183,4,8,1,False,hold,drive
+189,4,4,1,True,hold,hold
+190,4,4,1,True,hold,hold
+191,4,4,1,True,hold,hold
+192,4,8,1,False,hold,drive
+194,4,8,1,False,hold,drive
+199,4,4,1,True,hold,hold
+201,4,8,1,False,hold,drive
+202,4,4,1,True,hold,hold
+209,4,8,1,False,hold,drive
+215,4,4,1,True,hold,hold
+216,4,4,1,True,hold,hold
+227,4,4,1,True,hold,hold
+247,4,4,1,True,hold,hold
+249,4,4,1,True,hold,hold
+252,4,4,1,True,hold,hold
+312,4,8,1,False,hold,drive
+317,4,8,1,False,hold,drive
+318,4,8,1,False,hold,drive
+322,4,8,1,False,hold,drive
+337,4,8,1,False,hold,drive
+457,4,8,1,False,hold,drive
+467,4,4,1,True,hold,hold
+798,4,8,1,False,hold,drive
+908,4,4,1,True,hold,hold
+966,4,8,1,False,hold,drive
+982,4,8,1,False,hold,drive
+1008,4,4,1,True,hold,hold
+1032,4,8,1,False,hold,drive
+1076,4,4,1,True,hold,hold
+1079,4,4,1,True,hold,hold
+1166,4,4,1,True,hold,hold
+1176,4,4,1,True,hold,hold
+1180,4,4,1,True,hold,hold
+1181,4,8,1,False,hold,drive
+1193,4,4,1,True,hold,hold
+1203,4,4,1,True,hold,hold
+1205,4,8,1,False,hold,drive
+1206,4,4,1,True,hold,hold
+1211,4,4,1,True,hold,hold
+1213,4,4,1,True,hold,hold
+1218,4,8,1,False,hold,drive
+1223,4,8,1,False,hold,drive
+1225,4,4,1,True,hold,hold
+1232,4,4,1,True,hold,hold
+1235,4,4,1,True,hold,hold
+1237,4,4,1,True,hold,hold
+1238,4,8,1,False,hold,drive
+1239,4,8,1,False,hold,drive
+1240,4,8,1,False,hold,drive
+1242,4,8,1,False,hold,drive
+1244,4,8,1,False,hold,drive
+1247,4,4,1,True,hold,hold
+1252,4,8,1,False,hold,drive
+1253,4,8,1,False,hold,drive
+1263,4,4,1,True,hold,hold
+1267,4,4,1,True,hold,hold
+1270,4,4,1,True,hold,hold
+1273,4,8,1,False,hold,drive
+1275,4,4,1,True,hold,hold
+1277,4,4,1,True,hold,hold
+1281,4,8,1,False,hold,drive
+1283,4,4,1,True,hold,hold
+1286,4,8,1,False,hold,drive
+1288,4,8,1,False,hold,drive
+1293,5,4,1,False,flip,hold
+1295,5,8,1,False,flip,drive
+1298,5,4,1,False,flip,hold
+1304,5,4,1,False,flip,hold
+1308,5,4,1,False,flip,hold
+1311,5,4,1,False,flip,hold
+1312,5,4,1,False,flip,hold
+1328,5,4,1,False,flip,hold
+1329,5,4,1,False,flip,hold
+1331,5,4,1,False,flip,hold
+1333,5,8,1,False,flip,drive
+1338,5,4,1,False,flip,hold
+1342,6,8,1,False,stack,drive
+1343,6,8,1,False,stack,drive
+1348,6,8,1,False,stack,drive
+1355,6,4,1,False,stack,hold
+1364,6,8,1,False,stack,drive
+1367,6,8,1,False,stack,drive
+1368,6,4,1,False,stack,hold
+1369,6,4,1,False,stack,hold
+1375,7,4,1,False,wheel turn,hold
+1378,7,4,1,False,wheel turn,hold
+1383,7,4,1,False,wheel turn,hold
+1396,7,8,1,False,wheel turn,drive
+1398,7,4,1,False,wheel turn,hold
+1407,7,8,1,False,wheel turn,drive
+1426,7,8,1,False,wheel turn,drive
+1435,7,8,1,False,wheel turn,drive
+1438,7,8,1,False,wheel turn,drive
+1454,7,4,1,False,wheel turn,hold
+1457,7,8,1,False,wheel turn,drive
+1464,7,4,1,False,wheel turn,hold
+1470,7,8,1,False,wheel turn,drive
+1472,7,4,1,False,wheel turn,hold
+1477,7,8,1,False,wheel turn,drive
+1482,7,8,1,False,wheel turn,drive
+1484,7,4,1,False,wheel turn,hold
+1486,7,4,1,False,wheel turn,hold
+1488,7,8,1,False,wheel turn,drive
+1491,7,8,1,False,wheel turn,drive
+1493,7,8,1,False,wheel turn,drive
+1511,8,8,1,True,drive,drive
+1514,8,4,1,False,drive,hold
+1517,8,4,1,False,drive,hold
+1519,8,8,1,True,drive,drive
+1523,8,4,1,False,drive,hold
+1526,8,8,1,True,drive,drive
+1531,8,4,1,False,drive,hold
+1534,8,4,1,False,drive,hold
+1536,8,8,1,True,drive,drive
+1537,8,8,1,True,drive,drive
+1552,8,8,1,True,drive,drive
+1553,8,4,1,False,drive,hold
+1556,8,8,1,True,drive,drive
+1557,8,4,1,False,drive,hold
+1558,8,8,1,True,drive,drive
+1562,8,4,1,False,drive,hold
+1570,8,4,1,False,drive,hold
+1577,8,4,1,False,drive,hold
+1581,8,8,1,True,drive,drive
+1583,8,8,1,True,drive,drive
+1584,8,8,1,True,drive,drive
+1585,8,4,1,False,drive,hold
+1586,8,4,1,False,drive,hold
+1588,8,8,1,True,drive,drive
+1591,8,4,1,False,drive,hold
+1612,8,4,1,False,drive,hold
+1647,8,8,1,True,drive,drive
+1650,8,4,1,False,drive,hold
+1669,8,4,1,False,drive,hold
+1673,8,4,1,False,drive,hold
+1689,8,4,1,False,drive,hold
+1710,8,8,1,True,drive,drive
+1712,8,8,1,True,drive,drive
+1713,8,4,1,False,drive,hold
+1719,8,8,1,True,drive,drive
+1723,8,4,1,False,drive,hold
+1734,8,4,1,False,drive,hold
+1752,8,8,1,True,drive,drive
+1753,8,8,1,True,drive,drive
+1778,8,8,1,True,drive,drive
+1779,8,8,1,True,drive,drive
+1781,8,8,1,True,drive,drive
+1789,8,4,1,False,drive,hold
+1811,8,8,1,True,drive,drive
+1823,8,8,1,True,drive,drive
+1825,8,4,1,False,drive,hold
+1827,8,8,1,True,drive,drive
+1841,8,8,1,True,drive,drive
+1895,8,4,1,False,drive,hold
+1945,8,8,1,True,drive,drive
+1950,8,4,1,False,drive,hold
+1970,8,4,1,False,drive,hold
+2026,8,8,1,True,drive,drive
+2033,8,4,1,False,drive,hold
+2047,8,8,1,True,drive,drive
+2051,8,4,1,False,drive,hold
+2054,8,8,1,True,drive,drive
+2055,8,8,1,True,drive,drive
+2069,8,8,1,True,drive,drive
+2076,8,4,1,False,drive,hold
+2083,8,8,1,True,drive,drive
+2085,8,8,1,True,drive,drive
+2088,8,4,1,False,drive,hold
+2111,8,4,1,False,drive,hold
+2114,8,4,1,False,drive,hold
+2117,8,8,1,True,drive,drive
+2118,8,8,1,True,drive,drive
+2119,8,8,1,True,drive,drive
+2120,8,4,1,False,drive,hold
+2121,8,4,1,False,drive,hold
+2137,8,8,1,True,drive,drive
+2140,8,8,1,True,drive,drive
+2141,8,8,1,True,drive,drive
+2154,8,4,1,False,drive,hold
+2158,8,8,1,True,drive,drive
+2160,8,8,1,True,drive,drive
+2169,8,8,1,True,drive,drive
+2178,8,4,1,False,drive,hold
+2181,8,8,1,True,drive,drive
+2182,8,8,1,True,drive,drive
+2184,9,4,1,False,move,hold
+2186,9,8,1,False,move,drive
+2192,9,8,1,False,move,drive
+2194,9,8,1,False,move,drive
+2195,9,8,1,False,move,drive
+2196,9,4,1,False,move,hold
+2210,9,8,1,False,move,drive
+2214,9,4,1,False,move,hold
+2215,9,8,1,False,move,drive
+2216,9,4,1,False,move,hold
+2219,9,4,1,False,move,hold
+2222,9,4,1,False,move,hold
+2223,9,8,1,False,move,drive
+2231,9,4,1,False,move,hold
+2233,9,8,1,False,move,drive
+2266,9,8,1,False,move,drive
+2276,9,8,1,False,move,drive
+2325,9,4,1,False,move,hold
+2339,9,8,1,False,move,drive
+2354,9,4,1,False,move,hold
+2395,9,4,1,False,move,hold
+2404,9,8,1,False,move,drive
+2415,9,8,1,False,move,drive
+2473,9,4,1,False,move,hold
+2480,9,8,1,False,move,drive
+2481,9,8,1,False,move,drive
+2487,9,8,1,False,move,drive
+2501,9,4,1,False,move,hold

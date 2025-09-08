@@ -264,6 +264,63 @@ def normalize_dataframe_median_iqr(df: 'pd.DataFrame', medians: np.ndarray, iqr:
     logger.info(f"DataFrame normalizzato (median-IQR) - Shape: {df_normalized.shape}")
     return df_normalized
 
+def compute_mean_std_from_windows(X_windows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Calcola media e deviazione standard per ogni feature sull'intero set di finestre.
+    Questa è l'equivalente di 'compute_dataframe_mean_std' ma opera su un array NumPy.
+    Evita il data leakage calcolando le statistiche solo sul set di training.
+
+    Args:
+        X_windows (np.ndarray): Array di finestre con shape (n_windows, window_length, n_features).
+
+    Returns:
+        tuple: (mean, std) - due array numpy di shape (n_features,).
+    """
+    if X_windows.ndim != 3:
+        raise ValueError(f"L'input deve essere un array 3D (finestre, campioni, feature), ma ha shape {X_windows.shape}")
+    
+    # Calcoliamo la media lungo l'asse delle finestre (0) e l'asse dei campioni (1).
+    # Questo ci dà un valore per ogni feature.
+    # Ad esempio, per la feature 'Accel_LN_X', calcola la media di tutti i valori di 'Accel_LN_X'
+    # in tutte le finestre e in tutti i campioni.
+    means = np.mean(X_windows, axis=(0, 1))
+    stds = np.std(X_windows, axis=(0, 1))
+    
+    # Prevenzione della divisione per zero, esattamente come facevi tu.
+    # Questo accade se una feature è costante (es. sempre 0).
+    stds[stds == 0] = 1e-9
+    
+    logger.debug(f"Calcolate statistiche da finestre con shape {X_windows.shape}")
+    logger.debug(f"Shape delle medie calcolate: {means.shape}") # Dovrebbe essere (n_features,)
+    logger.debug(f"Shape delle std calcolate: {stds.shape}")   # Dovrebbe essere (n_features,)
+    
+    return means, stds
+
+def normalize_windows_mean_std(X_windows: np.ndarray, means: np.ndarray, stds: np.ndarray) -> np.ndarray:
+    """
+    Normalizza un set di finestre usando media e deviazione standard pre-calcolate.
+    Questa è l'equivalente di 'normalize_dataframe_mean_std' ma per array NumPy.
+    Sfrutta il broadcasting di NumPy per un'operazione efficiente.
+
+    Args:
+        X_windows (np.ndarray): Array di finestre da normalizzare (n_windows, window_length, n_features).
+        means (np.ndarray): Array delle medie per ogni feature (n_features,).
+        stds (np.ndarray): Array delle deviazioni standard per ogni feature (n_features,).
+
+    Returns:
+        np.ndarray: L'array di finestre normalizzato, con la stessa shape dell'input.
+    """
+    if X_windows.ndim != 3:
+        raise ValueError(f"L'input deve essere un array 3D (finestre, campioni, feature), ma ha shape {X_windows.shape}")
+        
+    if X_windows.shape[2] != len(means) or X_windows.shape[2] != len(stds):
+        raise ValueError(f"La dimensione delle feature ({X_windows.shape[2]}) non corrisponde a quella di means ({len(means)}) o stds ({len(stds)})")
+
+    # NumPy gestisce automaticamente il "broadcasting".
+    # Sottrae il vettore `means` (shape: n_features) da ogni "riga" di feature
+    # nell'array 3D `X_windows`. Lo stesso per la divisione.
+    # È estremamente efficiente.
+    return (X_windows - means) / stds
 # Esempio di testing
 if __name__ == "__main__":
     # Dati di esempio

@@ -80,7 +80,7 @@ def train(net, train_loader, val_loader,
           # Altri parametri
           epochs: int = 10,
           lr: float = 0.01,
-          patience: int = 7,
+          patience: int = 8,
           figure_name: str = "figure",
           f1_average: str = 'macro',
           criterion=None,
@@ -88,7 +88,7 @@ def train(net, train_loader, val_loader,
           save_plots: bool = False):
     
     """
-    Addestra e valida un modello di rete neurale.
+    AAddestra (e opzionalmente valida) un modello.
 
     Args:
         net (torch.nn.Module): Il modello da addestrare.
@@ -105,18 +105,21 @@ def train(net, train_loader, val_loader,
         save_plots (bool): Se True, salva i grafici delle curve di apprendimento.
     
     Returns:
-        float: Il miglior F1-score ottenuto sul set di validazione.
+        - Se c'è validazione: (best_val_f1, best_state_val)
+        - Se NON c'è validazione: (best_train_f1, best_state_train)
     """
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net.to(device)
     # Imposta l'ottimizzatore e la funzione di loss.
-    opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4); 
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode='max', patience=3, factor=0.5)
     # Usa il criterion passato come parametro, altrimenti usa CrossEntropyLoss di default
     if criterion is None:
         criterion = torch.nn.CrossEntropyLoss()
+    if hasattr(criterion, "to"):
+        criterion = criterion.to(device)
 
-    criterion.to(device)
     
 
     # Inizializza le liste per salvare la cronologia delle performance.
@@ -125,9 +128,16 @@ def train(net, train_loader, val_loader,
 
 
     # Inizializza l'early stopper e la variabile per il miglior F1 score di validazione.
-    early_stopper = EarlyStopper(patience=patience, min_delta=0.001)
-    best_val_f1 = 0.0
-    last_train_f1 = 0.0
+    early_stopper = EarlyStopper(patience=patience, min_delta=0.002)
+    
+    
+    # Tracking dei best state
+    best_val_f1      = float('-inf')
+    best_state_val   = None
+
+    best_train_f1    = float('-inf')
+    best_state_train = None
+
     logger.info(f"--- Inizio Training per '{figure_name}' ({epochs} epoche) ---")
 
     # Ciclo di Training per ogni Epoca
@@ -143,7 +153,7 @@ def train(net, train_loader, val_loader,
         for batch_data in train_loader:
             # Spacchetta i dati del batch. Ignoro i metadati (indici, etc.) con `_`.
             inputs, targets, _, _ = batch_data
-            inputs, targets = inputs.to(device), targets.to(device, non_blocking=True)
+            inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
             batch_size = inputs.size(0)
             
             # Azzera i gradienti, inizializza lo stato nascosto.
@@ -164,12 +174,19 @@ def train(net, train_loader, val_loader,
             epoch_train_preds.extend(predicted.cpu().numpy())
             epoch_train_labels.extend(targets.cpu().numpy())
         
-        # Calcola le metriche medie per l'intera epoca di training.
+        # metriche train epoca
         train_loss_history.append(np.mean(train_losses))
-        current_train_f1 = f1_score(epoch_train_labels, epoch_train_preds, average=f1_average, zero_division=0)
+        current_train_f1 = f1_score(epoch_train_labels, epoch_train_preds,
+                                    average=f1_average, zero_division=0)
         train_f1_history.append(current_train_f1)
-        last_train_f1 = current_train_f1 #salvo valore epoca corrente
-        if val_loader:
+
+        # aggiorna best train state SE NON c'è validazione
+        if val_loader is None and current_train_f1 > best_train_f1:
+            best_train_f1 = current_train_f1
+            best_state_train = {k: v.detach().cpu().clone() for k, v in net.state_dict().items()}
+
+
+        if val_loader is not None:
         # --- Fase di Validazione per l'Epoca Corrente ---
             net.eval() # Mette il modello in modalità valutazione (disattiva dropout, etc.)
             val_losses = []
@@ -178,7 +195,7 @@ def train(net, train_loader, val_loader,
             with torch.no_grad(): # Disabilita il calcolo dei gradienti per la validazione.
                 for batch_data in val_loader:
                     inputs, targets, _, _ = batch_data
-                    inputs, targets = inputs.to(device), targets.to(device)
+                    inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
                     batch_size = inputs.size(0)
                     val_h = net.init_hidden(batch_size)
                     output, _ = net(inputs, val_h, batch_size)
@@ -191,21 +208,26 @@ def train(net, train_loader, val_loader,
             # Calcola le metriche medie per l'intera epoca di validazione.
             val_loss_history.append(np.mean(val_losses))
             current_val_f1 = f1_score(epoch_val_labels, epoch_val_preds, average=f1_average, zero_division=0)
+            scheduler.step(current_val_f1)
             val_f1_history.append(current_val_f1)
+
+            scheduler.step(current_val_f1)
             
             # Aggiorna il miglior F1 score di validazione trovato finora.
             if current_val_f1 > best_val_f1:
                 best_val_f1 = current_val_f1
-                logger.info(f"Nuovo miglior F1-score di validazione: {best_val_f1:.4f}")
-
-            logger.info(f"Epoch {e+1}/{epochs} | Train Loss: {np.mean(train_losses):.4f} | Train F1: {current_train_f1:.4f} | Val Loss: {np.mean(val_losses):.4f} | Val F1: {current_val_f1:.4f}")
+                best_state_val = {k: v.detach().cpu().clone() for k, v in net.state_dict().items()}
+                logger.info(f"Nuovo miglior F1 val: {best_val_f1:.4f}")
             
+            logger.info(f"Epoch {e+1}/{epochs} | Train Loss: {train_loss_history[-1]:.4f} | "
+                        f"Train F1: {current_train_f1:.4f} | Val Loss: {val_loss_history[-1]:.4f} | "
+                        f"Val F1: {current_val_f1:.4f}")
             # Controlla se è il caso di fermare il training in anticipo.
             if early_stopper.early_stop(current_val_f1):
                 logger.info(f"Early stopping attivato all'epoca {e+1} perché non ci sono miglioramenti.")
                 break
         else:
-            logger.info(f"Epoch {e+1}/{epochs} | Train Loss: {np.mean(train_losses):.4f} | Train F1: {current_train_f1:.4f} | (Nessuna validazione)")
+            logger.info(f"Epoch {e+1}/{epochs} | Train F1: {current_train_f1:.4f} (no validation)")
 
     # Fine del Training: Salvataggio Grafici e Return
     # --------------------------------------------------
@@ -245,16 +267,23 @@ def train(net, train_loader, val_loader,
     # Ritorna il miglior F1 score di validazione. Questo valore è cruciale per Optuna.
     logger.info(f"Training per '{figure_name}' completato. Miglior F1-score di validazione raggiunto: {best_val_f1:.4f}")
     # Decide quale valore restituire in base alla presenza del val_loader.
-    if val_loader:
-        # Se c'era validazione, restituisco il miglior F1 score di validazione.
-        # Questo è il valore che serve a Optuna per l'ottimizzazione.
+
+    # Se ho una validation, ricarico il best nello stesso modello (comodo)
+    if val_loader is not None:
+        # fallback difensivo: se per qualche motivo non abbiamo salvato niente
+        if best_state_val is None:
+            best_state_val = {k: v.detach().cpu().clone() for k, v in net.state_dict().items()}
+            if best_val_f1 == float('-inf'):
+                best_val_f1 = 0.0
         logger.info(f"Training con validazione completato. Miglior F1 di validazione: {best_val_f1:.4f}")
-        return best_val_f1
+        return best_val_f1, best_state_val
     else:
-        # Se non c'era validazione (training finale), restituiamo l'F1 score
-        # di training dell'ultima epoca. Questo ci dà una metrica concreta.
-        logger.info(f"Training finale completato. F1 di training dell'ultima epoca: {last_train_f1:.4f}")
-        return last_train_f1
+        if best_state_train is None:
+            best_state_train = {k: v.detach().cpu().clone() for k, v in net.state_dict().items()}
+            if best_train_f1 == float('-inf'):
+                best_train_f1 = 0.0
+        logger.info(f"Training finale (no val) completato. Miglior F1 di training: {best_train_f1:.4f}")
+        return best_train_f1, best_state_train
 
 
 
@@ -269,14 +298,21 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
                    labels_dict=None,
                    plot_calibration_curve: bool = False):
     net.eval()
+    net.to(device)
     if criterion is None:
         criterion = torch.nn.CrossEntropyLoss()
+    elif hasattr(criterion, "to"):
+        criterion = criterion.to(device)
+    
     all_test_preds = []
     all_test_labels = []
     all_test_metadata = []
     all_test_consecutivity = []
     val_losses = []
-    val_accuracy = 0
+    total_correct = 0
+    total_seen = 0
+    all_test_confs = []
+    total_samples_processed = 0
 
     # DEBUG: Verifica dimensioni del DataLoader
     logger.info(f"\n=== DEBUG EVALUATE_MODEL ===")
@@ -284,7 +320,7 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
     logger.info(f"Test loader number of batches: {len(test_loader)}")
     logger.info(f"Expected total samples: {len(test_loader.dataset)}")
 
-    total_samples_processed = 0  # DEBUG: Conta finestre processate
+
 
 
     with torch.no_grad():
@@ -301,7 +337,6 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
             logger.info(f"Batch {batch_idx + 1}: {batch_size} finestre")
             val_h = net.init_hidden(batch_size)
             val_h = tuple([each.data for each in val_h])
-            net.to(device)
 
             inputs, targets = inputs.to(device), targets.to(device)
 
@@ -316,13 +351,11 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
             # CALIBRATION - Collect confidences for reliability plot
             probabilities = F.softmax(output, dim=1)  # [BS, N_CLASSES]
             max_conf, _ = torch.max(probabilities, dim=1)
-            if 'all_test_confs' not in locals():
-                all_test_confs = []
             all_test_confs.extend(max_conf.cpu().numpy())
 
-            top_p, top_class = output.topk(1, dim=1)
-            equals = predicted == targets.long()
-            val_accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
+            total_correct += (predicted == targets.long()).sum().item()  # Count correct predictions
+            total_seen += targets.numel()  # Count all seen samples
+            total_samples_processed += batch_size  # Count all processed samples
 
 
             all_test_metadata.extend(indices)
@@ -330,11 +363,9 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
             logger.info(f"Batch {batch_idx + 1} - Indici salvati: {indices}")
 
         # CALIBRATION - Plot the reliability_diagram
-        if 'all_test_confs' in locals() and len(all_test_confs) > 0:
-            reliability_plot(all_test_confs,
-                             all_test_preds,
-                             all_test_labels,
-                             save_path=exp_reports_dir)
+        if len(all_test_confs) > 0:
+            reliability_plot(all_test_confs, all_test_preds, all_test_labels, save_path=exp_reports_dir)
+
 
         # DEBUG: Risultati finali
     logger.info(f"Totale finestre processate: {total_samples_processed}")
@@ -344,8 +375,8 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
     logger.info(f"  - all_test_metadata: {len(all_test_metadata)}")
     logger.info(f"  - all_test_consecutivity: {len(all_test_consecutivity)}")
     # Calcolo del mean_loss e mean_accuracy 
-    mean_loss = np.mean(val_losses)
-    mean_accuracy = val_accuracy / len(test_loader)
+    mean_loss = np.mean(val_losses) if len(val_losses) > 0 else 0.0
+    mean_accuracy = (total_correct / total_seen) if total_seen > 0 else 0.0
     
     # Calcolo dell'F1 score con diverse strategie
     f1_scores = {
@@ -410,16 +441,17 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
 
     if save_confusion_matrix:
         os.makedirs(exp_figures_dir, exist_ok=True)
-        cm = confusion_matrix(all_test_labels, all_test_preds)
+        classes_present = sorted(set(all_test_labels) | set(all_test_preds))
+        cm = confusion_matrix(all_test_labels, all_test_preds, labels=classes_present)
         plt.figure(figsize=(16, 14), dpi=300)
         
         # Determina le etichette per gli assi
         if labels_dict:
             # Usa i nomi delle azioni
-            tick_labels = [labels_dict.get(i, f'Class_{i}') for i in range(len(np.unique(all_test_labels + all_test_preds)))]
+            tick_labels = [labels_dict.get(c, f'Class_{c}') for c in classes_present]
         else:
             # Fallback ai nomi del dataset
-            tick_labels = getattr(test_loader.dataset, 'classes', [f'Class_{i}' for i in range(cm.shape[0])])
+            tick_labels = [f'Class_{c}' for c in classes_present]
         
         sns.heatmap(cm, annot=True, fmt="d", cmap="Greys",  # in scala di grigi
                     xticklabels=tick_labels,

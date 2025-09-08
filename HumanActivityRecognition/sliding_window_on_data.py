@@ -297,10 +297,26 @@ def new_process_csv(file_path, nb_sensor_channels, sliding_window_length, slidin
         Y_windows_full, _ = data_processing.sliding_window(Y_segment.reshape(-1, 1), ws=(sliding_window_length, 1), ss=(sliding_window_step, 1), min_pad_samples=30, extreme_pad_samples=10)
         Y_windows = np.asarray([window[np.nonzero(window)[0][0]] if np.any(window != 0) else 0 for window in Y_windows_full])
         
-        row_indices_for_sw = original_row_ids_segment.reshape(-1, 1)
+        """row_indices_for_sw = original_row_ids_segment.reshape(-1, 1)
         row_windows, _ = data_processing.sliding_window(row_indices_for_sw, ws=(sliding_window_length, 1), ss=(sliding_window_step, 1))
+        row_windows = row_windows.squeeze(axis=2) if row_windows.ndim == 3 else row_windows"""
+
+        # 1) sposta tutti gli indici di +1 così il padding a zero non collide con l’indice reale 0
+        row_indices_for_sw = (original_row_ids_segment.reshape(-1, 1) + 1).astype(np.int64)
+
+        # 2) genera le finestre sugli indici "shiftati"
+        row_windows, _ = data_processing.sliding_window(
+            row_indices_for_sw, ws=(sliding_window_length, 1), ss=(sliding_window_step, 1),
+            # se passi anche min_pad_samples / extreme_pad_samples, lasciali identici a quelli usati per X/Y
+            min_pad_samples=30, extreme_pad_samples=10
+        )
+
+        # 3) rimuovi la dimensione dei canali se presente
         row_windows = row_windows.squeeze(axis=2) if row_windows.ndim == 3 else row_windows
-        
+
+        # 4) riporta indietro di 1: le celle di padding (0) diventano -1, gli indici reali tornano al loro valore
+        row_windows = row_windows - 1
+
         consecutivity_info = calculate_window_consecutivity(timestamps_segment, sliding_window_length, sliding_window_step, len(X_windows))
         
         X_all.append(X_windows)
