@@ -255,7 +255,7 @@ def get_pretrained_model_path(pt_norm, pt_aug):
     """
     Restituisce il path del modello pre-addestrato corretto in base alla configurazione.
     """
-    base_path = r'D:\codes\HumanActivityRecognition\models'
+    base_path = r'C:\codes\HumanActivityRecognition\models'
     
     if pt_norm == 'meanstd' and pt_aug == 'alltrs':
         return os.path.join(base_path, 'best_model_dl_norm_mean_std_and_aug.pkl')

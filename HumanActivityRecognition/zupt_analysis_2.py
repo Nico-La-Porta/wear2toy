@@ -754,6 +754,7 @@ def main():
         data_path=data_path,
         target_actions=target_actions  # Passiamo le azioni target qui
     )
+    logger.info(f"[DEBUG ZUPT] Dopo caricamento: Shape={df_toy.shape}, Sum Accel_X={df_toy['Accel_WR_X'].sum()}")
     df_toy = add_consecutive_segment_id(df_toy)
     
     # 2. ANALISI ZUPT PER AZIONE
@@ -788,6 +789,7 @@ def main():
 
     temp_action_dir = os.path.join(data_path, "temp_zupt_actions")
     os.makedirs(temp_action_dir, exist_ok=True)
+    logger.info(f"[DEBUG ZUPT] Prima di Sliding Window: Shape={df_normalized.shape}, Sum Accel_X={df_normalized['Accel_WR_X'].sum()}")
 
     for action_id in sorted(df_normalized['action_id'].unique()):
         df_action = df_normalized[df_normalized['action_id'] == action_id]
