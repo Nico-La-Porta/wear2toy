@@ -573,8 +573,8 @@ def main(args):
     target_actions=target_actions 
     )
     
-    logger.info(f"COLONNE SUBITO DOPO IL CARICAMENTO: {df_toy.columns.tolist()}")
-    df_toy = add_consecutive_segment_id(df_toy)
+    logger.info(f"[DEBUG HAR] Dopo caricamento: Shape={df_toy.shape}, Sum Accel_X={df_toy['Accel_WR_X'].sum()}")
+    df_toy = add_consecutive_segment_id(df_toy) 
     logger.info(f"Classi presenti dopo il caricamento unificato: {sorted(df_toy['action_id'].unique())}")
     
     
@@ -630,7 +630,7 @@ def main(args):
 
     # --- Hold-out set per bambini specifici --- 
 
-    if args.holdout_kids:
+    """if args.holdout_kids:
         logger.info(f"Separazione dei bambini per il test hold-out: {args.holdout_kids}")
         df_test_holdout = df_toy[df_toy['kid_id'].isin(args.holdout_kids)]
         df_train_val = df_toy[~df_toy['kid_id'].isin(args.holdout_kids)]
@@ -639,8 +639,11 @@ def main(args):
     else:
         logger.info("Nessun hold-out set specificato: Esecuzione K-Fold su tutto il dataset.")
         df_train_val = df_toy.copy()
-        df_test_holdout = None
+        df_test_holdout = None"""
 
+    logger.info("La gestione dell'Hold-out avverrà DOPO la selezione delle finestre.")
+    df_train_val = df_toy.copy() # Lavoriamo sempre con il df completo!
+    df_test_holdout = None # Sarà gestito dopo
     # --- Normalizzazione ---
     df_normalized = pd.DataFrame()
     mean, std = None, None
@@ -656,22 +659,19 @@ def main(args):
     
     if mean is not None and std is not None:
         df_normalized = normalization.normalize_dataframe_mean_std(df_train_val, mean, std)
-        if args.holdout_kids:
-            df_test_holdout_normalized = normalization.normalize_dataframe_mean_std(df_test_holdout, mean, std)
     else:
         logger.info("Nessuna normalizzazione al fine tuning applicata.")
         df_normalized = df_train_val
-        if args.holdout_kids:
-            df_test_holdout_normalized = df_test_holdout
+
     
     logger.info(f"COLONNE DOPO LA NORMALIZZAZIONE: {df_normalized.columns.tolist()}")
 
-    if target_actions is not None:
+    """if target_actions is not None:
         logger.info(f"Filtro target_actions PRIMA della sliding window: {target_actions}")
         logger.info(f"Azioni prima del filtro: {sorted(df_normalized['action_id'].unique())}")
         df_normalized = df_normalized[df_normalized['action_id'].isin(target_actions)]
         logger.info(f"Azioni dopo il filtro: {sorted(df_normalized['action_id'].unique())}")
-        logger.info(f"Righe rimanenti dopo filtro target_actions: {len(df_normalized)}")
+        logger.info(f"Righe rimanenti dopo filtro target_actions: {len(df_normalized)}")"""
 
     # --- Salvataggio file per azione e Sliding Window ---
     logger.info("Salvataggio file per azione e applicazione sliding window...")
@@ -679,7 +679,7 @@ def main(args):
     
     temp_action_dir = os.path.join(data_path, "temp_actions")
     os.makedirs(temp_action_dir, exist_ok=True)
-
+    logger.info(f"[DEBUG HAR] Prima di Sliding Window: Shape={df_normalized.shape}, Sum Accel_X={df_normalized['Accel_WR_X'].sum()}")
     for action_id in sorted(df_normalized['action_id'].unique()):
         df_action = df_normalized[df_normalized['action_id'] == action_id]
         temp_path = os.path.join(temp_action_dir, f'df_{args.toy}_action_{action_id}.csv')
@@ -834,7 +834,45 @@ def main(args):
         save_dir=exp_figures_dir
     )
 
-   
+
+    X_holdout_test = None
+    Y_holdout_test = None
+    meta_holdout_test = None
+    consec_holdout_test = None
+    if args.holdout_kids:
+        logger.info(f"ESEGUO SPLIT HOLDOUT SULLE FINESTRE FILTRATE per i kid: {args.holdout_kids}")
+
+        # Liste per contenere i dati divisi
+        X_train_val_list, Y_train_val_list, meta_train_val_list, consec_train_val_list = [], [], [], []
+        X_test_list, Y_test_list, meta_test_list, consec_test_list = [], [], [], []
+
+        # Itera su tutte le finestre selezionate
+        for i in range(len(X)):
+            kid_id = all_window_indices[i]['kid_id']
+            if kid_id in args.holdout_kids:
+                X_test_list.append(X[i])
+                Y_test_list.append(Y[i])
+                meta_test_list.append(all_window_indices[i])
+                consec_test_list.append(all_consecutivity[i])
+            else:
+                X_train_val_list.append(X[i])
+                Y_train_val_list.append(Y[i])
+                meta_train_val_list.append(all_window_indices[i])
+                consec_train_val_list.append(all_consecutivity[i])
+        
+        # Riconverti le liste in array numpy
+        X = np.array(X_train_val_list)
+        Y = np.array(Y_train_val_list)
+        all_window_indices = meta_train_val_list
+        all_consecutivity = np.array(consec_train_val_list)
+
+        X_holdout_test = np.array(X_test_list)
+        Y_holdout_test = np.array(Y_test_list)
+        # Assegna i valori alle variabili che abbiamo definito prima
+        meta_holdout_test = meta_test_list
+        consec_holdout_test = np.array(consec_test_list)
+        
+        logger.info(f"Split completato: {len(X)} finestre per train/val, {len(X_holdout_test)} per holdout test.")
 
     unique_labels = np.unique(Y)
     label_mapping = {label: i for i, label in enumerate(unique_labels)}
@@ -867,46 +905,59 @@ def main(args):
     if args.holdout_kids:
         logger.info("AVVIO PROCEDURA: K-Fold su Train/Val set + Valutazione finale su Hold-out")
 
+    # Invece di generare nuove finestre, ora usiamo quelle che abbiamo già separato.
+    # Il codice che generava finestre per il test set da un DataFrame va eliminato.
+    # I nostri dati di test sono già pronti nelle variabili X_holdout_test, Y_holdout_test, etc.
+
+        # Rinominiamo le variabili per coerenza con il resto dello script
+        X_test_final = X_holdout_test
+        Y_test_final = Y_holdout_test
+        all_window_indices_test = meta_holdout_test # Assumendo che tu abbia salvato i metadati
+        all_consecutivity_test = consec_holdout_test # e la consecutività
+
+        # Aggiungiamo un controllo per sicurezza
+        if X_test_final is None:
+            raise ValueError("I dati di holdout test non sono stati creati. Controlla il blocco di split precedente.")
+
+        logger.info(f"Dati di test finali pronti: X_test_final.shape={X_test_final.shape}")
+
+        # Applica lo STESSO remapping di etichette usato per il training.
+        Y_test_final_mapped = np.array([label_mapping.get(y) for y in Y_test_final if y in label_mapping])
         
-        logger.info("Preparazione del hold-out test...")
+        # Aggiungi un controllo per chiavi mancanti nel mapping
+        if len(Y_test_final_mapped) != len(Y_test_final):
+            logger.warning("Alcune etichette del test set non erano presenti nel training set e sono state ignorate.")
+            # Potresti voler gestire questo caso in modo più robusto
+            valid_indices = [i for i, y in enumerate(Y_test_final) if y in label_mapping]
+            Y_test_final = Y_test_final[valid_indices]
+            X_test_final = X_test_final[valid_indices]
+            all_window_indices_test = [all_window_indices_test[i] for i in valid_indices]
+            all_consecutivity_test = all_consecutivity_test[valid_indices]
+            Y_test_final_mapped = np.array([label_mapping[y] for y in Y_test_final])
 
-        # Il DataFrame df_test_holdout_normalized è già stato normalizzato correttamente all'inizio.
-        # Ora applichiamo la sliding window su di esso.
-        X_test_list, Y_test_list = [], []
-        all_window_indices_test, all_consecutivity_test = [], []
-        temp_action_dir_test = os.path.join(data_path, "temp_actions_test")
-        os.makedirs(temp_action_dir_test, exist_ok=True)
-
-        logger.info("Applicazione Sliding Window sul set di hold-out test...")
-        for action_id in sorted(df_test_holdout_normalized['action_id'].unique()):
-            df_action_test = df_test_holdout_normalized[df_test_holdout_normalized['action_id'] == action_id]
-            temp_path_test = os.path.join(temp_action_dir_test, f'df_test_{args.toy}_action_{action_id}.csv')
-            df_action_test.to_csv(temp_path_test, index=False)
-            X_w_te, Y_w_te, _, is_consec_te, win_idx_te = sliding_window_on_data.new_process_csv(
-                temp_path_test, 9, 100, 50
-            )
-            X_test_list.append(X_w_te); Y_test_list.append(Y_w_te)
-            all_consecutivity_test.extend(is_consec_te)
-            # metadati test
-            for i in range(len(X_w_te)):
-                # Crea la chiave stabile per questa finestra
-                window_key = (win_idx_te[i].get('original_file', 'unknown'), tuple(win_idx_te[i].get('row_indices', [])))
-                
-                all_window_indices_test.append({
-                    'global_window_id': len(all_window_indices_test),
-                    'action_id': action_id,
-                    'kid_id': win_idx_te[i].get('kid_id', 'unknown'),  # 🔧 Aggiungi kid_id
-                    'original_file': win_idx_te[i].get('original_file', 'unknown'),  # 🔧 Aggiungi original_file
-                    'row_indices': win_idx_te[i]['row_indices'],
-                    'window_key': window_key  # 🔧 CHIAVE STABILE
-                })
-
-        shutil.rmtree(temp_action_dir_test)
+        logger.info(f"Holdout test set prima del bilanciamento: X_test_holdout.shape={X_test_final.shape}")
+        logger.info(f"Y_train dtypes: {Y_mapped.dtype}, Y_test dtypes: {Y_test_final_mapped.dtype}")
+        logger.info(f"Y_train sample: {Y_mapped[:5]}, Y_test sample: {Y_test_final_mapped[:5]}")
         
-        # Concatena i risultati per creare gli array finali del test set.
-        X_test_final = np.concatenate(X_test_list, axis=0)
-        Y_test_final = np.concatenate(Y_test_list, axis=0).flatten()
-        all_consecutivity_test = np.array(all_consecutivity_test)
+        # APPLICA IL BILANCIAMENTO DELLE CLASSI (ora questa chiamata dovrebbe funzionare)
+        (X_balanced, Y_balanced, X_test_final, Y_test_mapped_balanced,
+        indices_balanced, indices_test_final, 
+        consec_balanced, consec_test_final) = balance_holdout_classes(
+            X_train=X, Y_train=Y_mapped, 
+            X_test=X_test_final, Y_test=Y_test_final_mapped,
+            all_window_indices_train=all_window_indices,
+            all_window_indices_test=all_window_indices_test,
+            all_consecutivity_train=all_consecutivity,
+            all_consecutivity_test=all_consecutivity_test,
+            percentage_to_move=0.15,
+            random_seed=seed_used
+        )
+        
+        # Aggiorna le variabili con i dati bilanciati
+        X = X_balanced
+        Y_mapped = Y_balanced
+        all_window_indices = indices_balanced
+        all_consecutivity = consec_balanced
 
         # --- CHECK 3: coerenza sul test hold-out ---
         sanity_check_window_alignment(
