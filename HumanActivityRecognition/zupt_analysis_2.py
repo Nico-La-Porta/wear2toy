@@ -7,7 +7,8 @@ Funzionalità:
 2. Filtraggio finestre con pause
 3. Downsampling selettivo (max 50 finestre per bambino/azione)
 4. Salvataggio indici finestre da mantenere
-5. Distribuzione prima/dopo per verifica
+5. Salvataggio finestre in npz con metadati completi
+6. Distribuzione prima/dopo per verifica
 """
 
 import os
@@ -22,11 +23,11 @@ import glob
 import pickle
 from collections import defaultdict, Counter
 
-# Aggiungi il path del progetto
+#Project path
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..', 'HumanActivityRecognition')))
 sys.path.append(os.path.abspath('HumanActivityRecognition'))
 
-# Import custom modules
+# Custom modules
 import sliding_window_on_data
 import normalization
 from utils.zupt import zupt_detect
@@ -334,6 +335,130 @@ def plot_action_with_zupt(accel, gyro, zupt, action_name, file_name, start_idx=0
     return fig, axs
 
 
+def save_windows_to_npz(X_final, Y_final, metadata_final, toy_name, seed, output_dir, target_actions, original_total_windows, zupt_removed_count, processing_params):
+    """
+    Salva tutte le finestre in formato NPZ con metadati completi
+    per facilitare l'identificazione del bambino per ogni finestra.
+    
+    Args:
+        X_final: Array delle finestre (n_windows, timesteps, features)
+        Y_final: Array delle labels (n_windows,)
+        metadata_final: Lista dei metadati per ogni finestra
+        toy_name: Nome del giocattolo
+        seed: Seed utilizzato per il downsampling
+        output_dir: Directory di output
+        target_actions: Lista delle azioni target
+        original_total_windows: Numero finestre originali
+        zupt_removed_count: Numero finestre rimosse per ZUPT
+        processing_params: Parametri del preprocessing
+    """
+    
+    logger.info(f"=== SALVATAGGIO NPZ PER {toy_name.upper()} (SEED={seed}) ===")
+    
+    # Crea directory specifica per seed
+    seed_dir = os.path.join(output_dir, f"seed_{seed}")
+    os.makedirs(seed_dir, exist_ok=True)
+    
+    # Prepara i metadati per il salvataggio
+    n_windows = len(X_final)
+    
+    # Array per tutti i metadati (con kid_id come string per evitare problemi)
+    action_ids = np.array([meta.get('action_id', -1) for meta in metadata_final], dtype=np.int32)
+    kid_ids = np.array([str(meta.get('kid_id', 'unknown')) for meta in metadata_final], dtype=object)
+    original_files = np.array([meta.get('original_file', 'unknown') for meta in metadata_final], dtype=object)
+    
+    # Informazioni sui row_indices (PADDING = -1)
+    all_row_indices = []
+    row_indices_start = []
+    row_indices_end = []
+    padding_counts = []
+    
+    for meta in metadata_final:
+        row_indices = meta.get('row_indices', [])
+        all_row_indices.append(row_indices)
+        
+        # Trova righe valide (non padding)
+        valid_rows = [r for r in row_indices if r != -1]  # Padding è -1
+        
+        if valid_rows:
+            row_indices_start.append(min(valid_rows))
+            row_indices_end.append(max(valid_rows))
+        else:
+            row_indices_start.append(-1)
+            row_indices_end.append(-1)
+        
+        # Conta il padding
+        padding_count = sum(1 for r in row_indices if r == -1)
+        padding_counts.append(padding_count)
+    
+    # Converti in array numpy
+    row_indices_start = np.array(row_indices_start, dtype=np.int32)
+    row_indices_end = np.array(row_indices_end, dtype=np.int32)
+    padding_counts = np.array(padding_counts, dtype=np.int32)
+    
+    # Statistiche per verificare
+    logger.info(f"Preparazione metadati completata:")
+    logger.info(f"  - Finestre totali: {n_windows}")
+    logger.info(f"  - Bambini unici: {np.unique(kid_ids)}")
+    logger.info(f"  - Azioni uniche: {np.unique(action_ids)}")
+    logger.info(f"  - File unici: {len(np.unique(original_files))}")
+    logger.info(f"  - Finestre con padding: {np.sum(padding_counts > 0)}")
+    
+    # Path del file NPZ
+    npz_path = os.path.join(seed_dir, f'{toy_name}_processed_windows_seed{seed}.npz')
+    
+    logger.info(f"Salvataggio in: {npz_path}")
+    
+    # Salva in NPZ con tutti i metadati
+    np.savez_compressed(
+        npz_path,
+        
+        # === DATI PRINCIPALI ===
+        X=X_final.astype(np.float32),                    # Shape: (n_windows, window_size, n_features)
+        Y=Y_final.astype(np.int32),                      # Shape: (n_windows,)
+        
+        # === METADATI PER IDENTIFICAZIONE ===
+        kid_ids=kid_ids,                                 # ID bambino per ogni finestra
+        action_ids=action_ids,                           # ID azione per ogni finestra  
+        original_files=original_files,                   # File CSV originale per ogni finestra
+        
+        # === INFORMAZIONI SULLE RIGHE ORIGINALI ===
+        row_indices_start=row_indices_start,             # Prima riga del CSV usata (-1 se tutte padding)
+        row_indices_end=row_indices_end,                 # Ultima riga del CSV usata (-1 se tutte padding)
+        padding_counts=padding_counts,                   # Numero di timesteps di padding per finestra
+        
+        # === METADATI DEL PROCESSING ===
+        toy_name=toy_name,
+        target_actions=np.array(target_actions, dtype=np.int32),
+        processing_seed=seed,
+        
+        # === PARAMETRI UTILIZZATI ===
+        zupt_threshold=processing_params.get('pause_threshold', 0.5),
+        max_windows_per_kid_action=processing_params.get('max_windows', 50),
+        
+        # === STATISTICHE ===
+        original_total_windows=original_total_windows,
+        zupt_removed_windows=zupt_removed_count,
+        downsampling_removed_windows=original_total_windows - zupt_removed_count - n_windows,
+        final_total_windows=n_windows,
+        
+        # === INFORMAZIONI PER DEBUGGING ===
+        creation_timestamp=pd.Timestamp.now().isoformat(),
+        padding_value_used=-1  # Documenta che il padding è rappresentato da -1
+    )
+    
+    logger.info(f"✓ NPZ salvato con successo!")
+    logger.info(f"  Shape X: {X_final.shape}")
+    logger.info(f"  Shape Y: {Y_final.shape}")
+    logger.info(f"  Metadati inclusi: kid_ids, action_ids, original_files, row_indices, padding_counts")
+    
+    # Crea file di esempio per l'utilizzo
+    create_usage_example(npz_path, seed_dir, toy_name, seed)
+    
+    # Test rapido di caricamento
+    test_npz_loading(npz_path)
+    
+    return npz_path
 
 
 def map_pause_rows_to_windows(pause_analysis, all_window_indices, pause_threshold=0.5):
@@ -608,7 +733,7 @@ def create_distribution_plot(Y, toy_name, title_suffix, save_path=None):
     if save_path:
         if "finale" in title_suffix.lower():  # Solo per i plot finali
             plt.savefig(f"{save_path}.svg", format='svg', dpi=300, bbox_inches='tight')
-            plt.savefig(f"{save_path}.png", format='svg', dpi=300, bbox_inches='tight')
+            plt.savefig(f"{save_path}.png", format='png', dpi=300, bbox_inches='tight')
             logger.info(f"Plot finale salvato in SVG: {save_path}.svg")
         else:
             # Per gli altri plot (iniziale, dopo ZUPT) mantieni PNG
@@ -642,63 +767,6 @@ def get_target_actions_for_toy(toy_name):
     
     return target_actions.get(toy_name, [])
 
-def inspect_zupt_results(pkl_path):
-    """
-    Ispeziona il contenuto del file PKL dei risultati ZUPT.
-    """
-    
-    import pickle
-    
-    print(f"=== ISPEZIONE FILE: {pkl_path} ===\n")
-    
-    try:
-        with open(pkl_path, 'rb') as f:
-            results = pickle.load(f)
-        
-        print("STRUTTURA DEL FILE:")
-        for key in results.keys():
-            print(f"  - {key}: {type(results[key])}")
-        
-        print(f"\n INFORMAZIONI GENERALI:")
-        print(f"  - Giocattolo: {results['toy_name']}")
-        print(f"  - Azioni target: {results['target_actions']}")
-        print(f"  - Finestre originali: {results['original_windows']}")
-        print(f"  - Finestre dopo ZUPT: {results['zupt_filtered_windows']}")
-        print(f"  - Finestre finali: {results['final_windows']}")
-        print(f"  - Percentuale mantenuta: {results['final_windows']/results['original_windows']*100:.1f}%")
-        
-        print(f"\n PARAMETRI USATI:")
-        for param, value in results['parameters'].items():
-            print(f"  - {param}: {value}")
-        
-        print(f"\n ANALISI PAUSE:")
-        pause_analysis = results['pause_analysis']
-        print(f"  - File analizzati: {len(pause_analysis['files_analyzed'])}")
-        
-        total_pause_segments = 0
-        for file_name, file_data in pause_analysis['files_analyzed'].items():
-            file_segments = sum(len(action['pause_segments']) for action in file_data['actions_analysis'].values())
-            total_pause_segments += file_segments
-            if file_segments > 0:
-                print(f"{file_name}: {file_segments} segmenti di pausa")
-        
-        print(f"  - Totale segmenti di pausa trovati: {total_pause_segments}")
-        
-        print(f"\nMAPPING RESULTS:")
-        mapping = results['mapping_results']
-        print(f"  - Finestre analizzate: {mapping['summary']['total_windows']}")
-        print(f"  - Finestre rimosse per pause: {mapping['summary']['windows_removed']}")
-        print(f"  - Percentuale rimossa per pause: {mapping['summary']['removal_percentage']:.1f}%")
-        
-        print(f"\nINDICI FINESTRE DA MANTENERE:")
-        print(f"  - Numero indici: {len(results['windows_to_keep_indices'])}")
-        print(f"  - Primi 10 indici: {results['windows_to_keep_indices'][:10]}")
-        
-        return results
-        
-    except Exception as e:
-        print(f"ERRORE nel caricamento: {e}")
-        return None
 
 
 def main():
@@ -832,7 +900,7 @@ def main():
             'kid_id': meta.get('kid_id', 'unknown'),  # Aggiungi kid_id  
             'original_file': meta.get('original_file', 'unknown'),  # Aggiungi original_file
             'row_indices': meta['row_indices'],
-            'window_key': window_key  # 🔧 CHIAVE STABILE
+            'window_key': window_key  #CHIAVE STABILE
         })
     
     logger.info("=== VERIFICA METADATI DOPO SLIDING WINDOW ===")
@@ -972,6 +1040,95 @@ def main():
             if not (arrays_match and labels_match):
                 logger.error("ATTENZIONE: I dati estratti non corrispondono ai dati finali!")
                 logger.error("Questo indica un errore nel calcolo degli indici.")
+        
+        logger.info("\n=== PREPARAZIONE METADATI COMPLETI ===")
+        
+        # Estrai metadati per ogni finestra finale
+        windows_kid_ids = []
+        windows_action_ids = []
+        windows_original_files = []
+        windows_global_indices = []
+        windows_row_indices_start = []
+        windows_row_indices_end = []
+        windows_padding_counts = []
+
+        for i, global_idx in enumerate(final_indices_global):
+            meta = all_window_indices[global_idx]
+            
+            windows_kid_ids.append(meta.get('kid_id', 'unknown'))
+            windows_action_ids.append(meta.get('action_id', -1))
+            windows_original_files.append(meta.get('original_file', 'unknown'))
+            windows_global_indices.append(global_idx)
+            
+            # Info sugli indici delle righe originali
+            row_indices = meta.get('row_indices', [])
+            valid_rows = [r for r in row_indices if r != -1]  # Escludi padding
+            
+            if valid_rows:
+                windows_row_indices_start.append(min(valid_rows))
+                windows_row_indices_end.append(max(valid_rows))
+            else:
+                windows_row_indices_start.append(-1)
+                windows_row_indices_end.append(-1)
+            
+            # Conta padding
+            padding_count = sum(1 for r in row_indices if r == -1)
+            windows_padding_counts.append(padding_count)
+        
+        
+        # Converti in array numpy per efficienza
+        windows_kid_ids = np.array(windows_kid_ids, dtype=object)
+        windows_action_ids = np.array(windows_action_ids, dtype=np.int32)
+        windows_original_files = np.array(windows_original_files, dtype=object)
+        windows_global_indices = np.array(windows_global_indices, dtype=np.int32)
+        windows_row_indices_start = np.array(windows_row_indices_start, dtype=np.int32)
+        windows_row_indices_end = np.array(windows_row_indices_end, dtype=np.int32)
+        windows_padding_counts = np.array(windows_padding_counts, dtype=np.int32)
+        
+        logger.info(f"Metadati preparati per {len(X_final)} finestre")
+        logger.info(f"Kids unici: {np.unique(windows_kid_ids)}")
+        logger.info(f"Actions unici: {np.unique(windows_action_ids)}")
+
+        # SALVATAGGIO IN NPZ CON METADATI COMPLETI
+        npz_path = os.path.join(seed_dir, f'{args.toy}_processed_windows_seed{seed}.npz')
+        
+        logger.info(f"\n=== SALVATAGGIO NPZ: {npz_path} ===")
+        
+        np.savez_compressed(
+            npz_path,
+            # DATI PRINCIPALI
+            X=X_final,                                    # Shape: (n_windows, window_size, n_features)
+            Y=Y_final,                                    # Shape: (n_windows,)
+            
+            # METADATI PER IDENTIFICAZIONE
+            kid_ids=windows_kid_ids,                      # ID bambino per ogni finestra
+            action_ids=windows_action_ids,                # ID azione per ogni finestra  
+            original_files=windows_original_files,        # File CSV originale
+            global_window_indices=windows_global_indices, # Indice globale originale
+            
+            # METADATI AGGIUNTIVI
+            row_indices_start=windows_row_indices_start,  # Prima riga del CSV usata
+            row_indices_end=windows_row_indices_end,      # Ultima riga del CSV usata
+            padding_counts=windows_padding_counts,        # Numero di time steps di padding
+            
+            # INFORMAZIONI SUL PROCESSING
+            toy_name=args.toy,
+            target_actions=np.array(target_actions),
+            processing_seed=seed,
+            zupt_threshold=args.pause_threshold,
+            max_windows_per_kid_action=args.max_windows,
+            
+            # STATISTICHE
+            original_total_windows=len(X),
+            zupt_removed_windows=len(mapping_results['windows_to_remove']),
+            final_total_windows=len(X_final)
+        )
+
+        logger.info(f"NPZ salvato con successo!")
+        logger.info(f"  - Finestre: {len(X_final)}")
+        logger.info(f"  - Features per finestra: {X_final.shape[1]} timesteps x {X_final.shape[2]} sensori")
+        logger.info(f"  - Metadati: kid_ids, action_ids, original_files, etc.")
+
 
 
         final_window_keys = [all_window_indices[idx]['window_key'] for idx in final_indices_global]
@@ -1096,10 +1253,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # Per debug: ispeziona il file del primo seed (es. seed=42)
-    default_seed = 42
-    pkl_path = f"zupt_preprocessing_output/car_zupt_filtering_results_seed{default_seed}.pkl"
-    if os.path.exists(pkl_path):
-        inspect_zupt_results(pkl_path)
+
 
 

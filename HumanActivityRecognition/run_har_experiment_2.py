@@ -255,7 +255,7 @@ def get_pretrained_model_path(pt_norm, pt_aug):
     """
     Restituisce il path del modello pre-addestrato corretto in base alla configurazione.
     """
-    base_path = r'D:\codes\HumanActivityRecognition\models'
+    base_path = r'C:\codes\HumanActivityRecognition\models'
     
     if pt_norm == 'meanstd' and pt_aug == 'alltrs':
         return os.path.join(base_path, 'best_model_dl_norm_mean_std_and_aug.pkl')
@@ -323,37 +323,37 @@ def configure_model_for_tuning(model, tuning_strategy, num_classes):
 
 
 
-
-
-def balance_holdout_classes(X_train, Y_train, X_test, Y_test, 
-                          all_window_indices_train, all_window_indices_test,
-                          all_consecutivity_train, all_consecutivity_test,
-                          percentage_to_move=0.15, random_seed=42):
+def balance_holdout_classes_npz(X_train_val, Y_train_val, kid_ids_train_val, action_ids_train_val,
+                               X_test_holdout, Y_test_holdout, kid_ids_test_holdout, action_ids_test_holdout,
+                               original_files_train_val, original_files_test_holdout,
+                               row_indices_start_train_val, row_indices_start_test_holdout,
+                               row_indices_end_train_val, row_indices_end_test_holdout,
+                               padding_counts_train_val, padding_counts_test_holdout,
+                               percentage_to_move=0.15, random_seed=42):
     """
-    Bilancia le classi nel test set spostando finestre dal training set
-    quando alcune classi sono mancanti nel test set (holdout scenario).
+    Bilancia le classi nel test holdout spostando finestre dal train/val set
+    quando alcune classi sono mancanti nel test set (workflow NPZ).
     
     Args:
-        X_train, Y_train: Dati di training
-        X_test, Y_test: Dati di test (holdout)
-        all_window_indices_train/test: Metadati delle finestre
-        all_consecutivity_train/test: Informazioni di consecutività
+        X_train_val, Y_train_val: Dati di train/validation mappati
+        kid_ids_train_val, action_ids_train_val: Metadati train/val
+        X_test_holdout, Y_test_holdout: Dati di test holdout mappati
+        kid_ids_test_holdout, action_ids_test_holdout: Metadati test holdout
+        original_files_*, row_indices_*, padding_counts_*: Altri metadati NPZ
         percentage_to_move: Percentuale di finestre da spostare per classe mancante
         random_seed: Seed per riproducibilità
     
     Returns:
-        tuple: (X_train_updated, Y_train_updated, X_test_updated, Y_test_updated,
-                indices_train_updated, indices_test_updated, 
-                consec_train_updated, consec_test_updated)
+        tuple: Dati e metadati aggiornati per train_val e test_holdout
     """
-    logger.info("=== INIZIO BILANCIAMENTO CLASSI HOLDOUT TEST ===")
+    logger.info("=== INIZIO BILANCIAMENTO CLASSI HOLDOUT NPZ ===")
     
     # Conta distribuzione classi
-    train_class_distribution = Counter(Y_train)
-    test_class_distribution = Counter(Y_test)
+    train_class_distribution = Counter(Y_train_val)
+    test_class_distribution = Counter(Y_test_holdout)
     
     # Trova classi mancanti nel test
-    all_classes = set(Y_train)
+    all_classes = set(Y_train_val)
     missing_classes = [cls for cls in all_classes if cls not in test_class_distribution]
     
     logger.info(f"Classi totali nel training: {sorted(all_classes)}")
@@ -362,9 +362,12 @@ def balance_holdout_classes(X_train, Y_train, X_test, Y_test,
     
     if not missing_classes:
         logger.info("Tutte le classi sono già presenti nel test. Nessun bilanciamento necessario.")
-        return (X_train, Y_train, X_test, Y_test, 
-                all_window_indices_train, all_window_indices_test,
-                all_consecutivity_train, all_consecutivity_test)
+        return (X_train_val, Y_train_val, kid_ids_train_val, action_ids_train_val,
+                original_files_train_val, row_indices_start_train_val, row_indices_end_train_val, 
+                padding_counts_train_val,
+                X_test_holdout, Y_test_holdout, kid_ids_test_holdout, action_ids_test_holdout,
+                original_files_test_holdout, row_indices_start_test_holdout, row_indices_end_test_holdout,
+                padding_counts_test_holdout)
     
     # Calcola finestre da spostare per ogni classe mancante
     windows_to_move = {}
@@ -380,7 +383,7 @@ def balance_holdout_classes(X_train, Y_train, X_test, Y_test,
     
     for missing_class in missing_classes:
         # Trova tutti gli indici delle finestre di questa classe nel training
-        class_indices = np.where(Y_train == missing_class)[0]
+        class_indices = np.where(Y_train_val == missing_class)[0]
         
         # Seleziona casualmente le finestre da spostare
         n_to_move = windows_to_move[missing_class]
@@ -397,37 +400,51 @@ def balance_holdout_classes(X_train, Y_train, X_test, Y_test,
     
     if len(indices_to_move) == 0:
         logger.info("Nessuna finestra da spostare.")
-        return (X_train, Y_train, X_test, Y_test, 
-                all_window_indices_train, all_window_indices_test,
-                all_consecutivity_train, all_consecutivity_test)
+        return (X_train_val, Y_train_val, kid_ids_train_val, action_ids_train_val,
+                original_files_train_val, row_indices_start_train_val, row_indices_end_train_val, 
+                padding_counts_train_val,
+                X_test_holdout, Y_test_holdout, kid_ids_test_holdout, action_ids_test_holdout,
+                original_files_test_holdout, row_indices_start_test_holdout, row_indices_end_test_holdout,
+                padding_counts_test_holdout)
     
-    # Estrai finestre da spostare
-    X_to_move = X_train[indices_to_move]
-    Y_to_move = Y_train[indices_to_move]
-    indices_to_move_meta = [all_window_indices_train[i] for i in indices_to_move]
-    consec_to_move = all_consecutivity_train[indices_to_move]
+    # ===== ESTRAI FINESTRE DA SPOSTARE =====
+    X_to_move = X_train_val[indices_to_move]
+    Y_to_move = Y_train_val[indices_to_move]
+    kid_ids_to_move = kid_ids_train_val[indices_to_move]
+    action_ids_to_move = action_ids_train_val[indices_to_move]
+    original_files_to_move = original_files_train_val[indices_to_move]
+    row_start_to_move = row_indices_start_train_val[indices_to_move]
+    row_end_to_move = row_indices_end_train_val[indices_to_move]
+    padding_to_move = padding_counts_train_val[indices_to_move]
     
-    # Crea maschera per mantenere le finestre nel training
-    mask_keep = np.ones(len(X_train), dtype=bool)
+    # ===== CREA MASCHERA PER FINESTRE DA MANTENERE NEL TRAINING =====
+    mask_keep = np.ones(len(X_train_val), dtype=bool)
     mask_keep[indices_to_move] = False
     
-    # Aggiorna training set (rimuove finestre spostate)
-    X_train_updated = X_train[mask_keep]
-    Y_train_updated = Y_train[mask_keep]
-    all_window_indices_train_array = np.array(all_window_indices_train, dtype=object)
-    indices_train_updated = all_window_indices_train_array[mask_keep].tolist()
-    consec_train_updated = all_consecutivity_train[mask_keep]
+    # ===== AGGIORNA TRAINING SET (rimuove finestre spostate) =====
+    X_train_updated = X_train_val[mask_keep]
+    Y_train_updated = Y_train_val[mask_keep]
+    kid_ids_train_updated = kid_ids_train_val[mask_keep]
+    action_ids_train_updated = action_ids_train_val[mask_keep]
+    original_files_train_updated = original_files_train_val[mask_keep]
+    row_start_train_updated = row_indices_start_train_val[mask_keep]
+    row_end_train_updated = row_indices_end_train_val[mask_keep]
+    padding_train_updated = padding_counts_train_val[mask_keep]
     
-    # Aggiorna test set (aggiunge finestre spostate)
-    X_test_updated = np.concatenate([X_test, X_to_move], axis=0)
-    Y_test_updated = np.concatenate([Y_test, Y_to_move], axis=0)
-    indices_test_updated = all_window_indices_test + indices_to_move_meta
-    consec_test_updated = np.concatenate([all_consecutivity_test, consec_to_move], axis=0)
+    # ===== AGGIORNA TEST SET (aggiunge finestre spostate) =====
+    X_test_updated = np.concatenate([X_test_holdout, X_to_move], axis=0)
+    Y_test_updated = np.concatenate([Y_test_holdout, Y_to_move], axis=0)
+    kid_ids_test_updated = np.concatenate([kid_ids_test_holdout, kid_ids_to_move], axis=0)
+    action_ids_test_updated = np.concatenate([action_ids_test_holdout, action_ids_to_move], axis=0)
+    original_files_test_updated = np.concatenate([original_files_test_holdout, original_files_to_move], axis=0)
+    row_start_test_updated = np.concatenate([row_indices_start_test_holdout, row_start_to_move], axis=0)
+    row_end_test_updated = np.concatenate([row_indices_end_test_holdout, row_end_to_move], axis=0)
+    padding_test_updated = np.concatenate([padding_counts_test_holdout, padding_to_move], axis=0)
     
-    # Log risultati finali
-    logger.info("=== RISULTATI BILANCIAMENTO ===")
-    logger.info(f"Training set: {X_train.shape} -> {X_train_updated.shape}")
-    logger.info(f"Test set: {X_test.shape} -> {X_test_updated.shape}")
+    # ===== LOG RISULTATI FINALI =====
+    logger.info("=== RISULTATI BILANCIAMENTO NPZ ===")
+    logger.info(f"Training set: {X_train_val.shape} -> {X_train_updated.shape}")
+    logger.info(f"Test set: {X_test_holdout.shape} -> {X_test_updated.shape}")
     
     # Verifica nuova distribuzione
     updated_train_distribution = Counter(Y_train_updated)
@@ -448,90 +465,30 @@ def balance_holdout_classes(X_train, Y_train, X_test, Y_test,
     else:
         logger.info("✓ Tutte le classi ora presenti nel test set.")
     
-    return (X_train_updated, Y_train_updated, X_test_updated, Y_test_updated,
-            indices_train_updated, indices_test_updated, 
-            consec_train_updated, consec_test_updated)
+    # ===== DEBUG COERENZA METADATI =====
+    logger.info("=== VERIFICA COERENZA METADATI ===")
+    logger.info(f"X_train shape: {X_train_updated.shape}")
+    logger.info(f"kid_ids_train length: {len(kid_ids_train_updated)}")
+    logger.info(f"action_ids_train length: {len(action_ids_train_updated)}")
+    logger.info(f"X_test shape: {X_test_updated.shape}")
+    logger.info(f"kid_ids_test length: {len(kid_ids_test_updated)}")
+    logger.info(f"action_ids_test length: {len(action_ids_test_updated)}")
+    
+    # Verifica che tutte le lunghezze siano coerenti
+    assert len(X_train_updated) == len(Y_train_updated) == len(kid_ids_train_updated), "Lunghezze training inconsistenti"
+    assert len(X_test_updated) == len(Y_test_updated) == len(kid_ids_test_updated), "Lunghezze test inconsistenti"
+    
+    logger.info("✓ Verifica coerenza metadati: OK")
+    
+    return (X_train_updated, Y_train_updated, kid_ids_train_updated, action_ids_train_updated,
+            original_files_train_updated, row_start_train_updated, row_end_train_updated, 
+            padding_train_updated,
+            X_test_updated, Y_test_updated, kid_ids_test_updated, action_ids_test_updated,
+            original_files_test_updated, row_start_test_updated, row_end_test_updated,
+            padding_test_updated)
 
 
-def sanity_check_window_alignment(
-    Y,
-    window_meta,
-    keep_idx=None,
-    phase="check",
-    sample_size=1000,
-    strict=True
-):
-    """
-    Verifica coerenza tra etichette e metadati delle finestre.
-    - Controlla lunghezze Y vs metadati.
-    - Verifica che meta['action_id'] == Y per un campione di finestre (o tutte).
-    - Controlla contiguità di meta['row_indices'].
-    - Se keep_idx è fornito (post-filtro), verifica che meta['global_window_id'] == keep_idx[pos].
-
-    Args:
-        Y (np.ndarray/list): etichette per-finestra.
-        window_meta (list[dict]): ciascun dict deve contenere 'action_id', 'row_indices', 'global_window_id'.
-        keep_idx (np.ndarray|list|None): indici originali tenuti (post-filtro seed). Se None, skip di questo check.
-        phase (str): etichetta per il log.
-        sample_size (int|None): quante finestre controllare. None = tutte.
-        strict (bool): se True, solleva AssertionError al primo errore bloccante.
-
-    Returns:
-        bool: True se i controlli passano, False altrimenti (se strict=False).
-    """
-    n = len(window_meta)
-    if len(Y) != n:
-        msg = f"[{phase}] Lunghezze diverse: len(Y)={len(Y)} vs len(meta)={n}"
-        if strict: 
-            raise AssertionError(msg)
-        else:
-            logger.error(msg)
-            return False
-
-    # Scegliamo un sottoinsieme deterministico per velocità, se grande
-    idxs = np.arange(n)
-    if sample_size is not None and n > sample_size:
-        rng = np.random.default_rng(0)  # deterministico
-        idxs = rng.choice(n, size=sample_size, replace=False)
-
-    problems = 0
-    for pos in idxs:
-        meta = window_meta[pos]
-        y_val = int(Y[pos])
-
-        # 1) Y vs action_id
-        if int(meta['action_id']) != y_val:
-            logger.error(f"[{phase}] Mismatch action_id @pos={pos}: Y={y_val}, meta.action_id={meta['action_id']}")
-            problems += 1
-            if strict:
-                break
-
-        # 2) contiguità row_indices
-        rows = meta.get('row_indices', None)
-        if rows is not None and len(rows) > 1:
-            rows = np.asarray(rows)
-            if not np.all(np.diff(rows) == 1):
-                # warning (non bloccante): può capitare su dati particolari
-                diffs_unique = np.unique(np.diff(rows))
-                logger.warning(f"[{phase}] row_indices non contigui @pos={pos}: diffs unici {diffs_unique[:5]}")
-
-        # 3) global_window_id vs keep_idx (solo post-filtro seed)
-        if keep_idx is not None:
-            if int(meta['global_window_id']) != int(keep_idx[pos]):
-                logger.error(f"[{phase}] Mismatch global_window_id @pos={pos}: meta={meta['global_window_id']} vs keep_idx={keep_idx[pos]}")
-                problems += 1
-                if strict:
-                    break
-
-    if problems == 0:
-        logger.info(f"[{phase}] Sanity check OK su {len(idxs)} finestre (n={n}).")
-        return True
-
-    if strict:
-        raise AssertionError(f"[{phase}] Trovate {problems} incongruenze (vedi log).")
-    return False
-
-
+        
 def main(args):
     """
     Funzione principale che esegue l'esperimento.
@@ -544,60 +501,111 @@ def main(args):
     # ===== Ricava il seed dal pickle =====
     target_actions = None
     seed_used = 42
+    npz_path = None
     if args.filtered_indices_pkl:
         try:
             with open(args.filtered_indices_pkl, 'rb') as f:
                 idx_pack = pickle.load(f)
             target_actions = idx_pack.get('target_actions', None)
             seed_used = idx_pack.get('processing_info', {}).get('seed', None)
+
+            # Costruisci il path del file NPZ basandoti sul pickle
+            pkl_dir = os.path.dirname(args.filtered_indices_pkl)
+            npz_filename = f'{args.toy}_processed_windows_seed{seed_used}.npz'
+            npz_path = os.path.join(pkl_dir, npz_filename)
+
+
             if seed_used is None:
                 # fallback: estrai dal nome file se contiene "seed_xx"
                 import re
                 match = re.search(r'seed[_\-]?(\d+)', args.filtered_indices_pkl)
                 if match:
                     seed_used = int(match.group(1))
+                    npz_filename = f'{args.toy}_processed_windows_seed{seed_used}.npz'
+                    npz_path = os.path.join(pkl_dir, npz_filename)
         except Exception as e:
             logger.warning(f"Impossibile leggere seed dal pickle: {e}")
     if seed_used is None:
         seed_used = 42  # fallback finale
 
+    if npz_path is None or not os.path.exists(npz_path):
+        raise FileNotFoundError(f"File NPZ non trovato: {npz_path}. Assicurati di aver eseguito zupt_analysis_2.py prima.")
 
-    if target_actions is None:
-        logger.warning("ATTENZIONE: 'target_actions' non trovato nel pickle. Il caricamento dei dati potrebbe non essere coerente con lo script ZUPT.")
+    
 
-    logger.info(f"Target actions dal pickle: {target_actions}")
+    logger.info(f"Caricamento finestre pre-processate da: {npz_path}")
+    logger.info(f"Target actions: {target_actions}")
+    logger.info(f"Seed utilizzato: {seed_used}")
 
+
+    # ===== 2. CARICA DATI ORIGINALI PER CALCOLO MEDIA/STD =====
+    logger.info("Caricamento dati originali per calcolo statistiche di normalizzazione...")
     df_toy, toy_mapping = load_and_preprocess_data_unified(
     toy_name=args.toy, 
     data_path=data_path,
     target_actions=target_actions 
     )
     
-    logger.info(f"[DEBUG HAR] Dopo caricamento: Shape={df_toy.shape}, Sum Accel_X={df_toy['Accel_WR_X'].sum()}")
-    df_toy = add_consecutive_segment_id(df_toy) 
-    logger.info(f"Classi presenti dopo il caricamento unificato: {sorted(df_toy['action_id'].unique())}")
+    df_toy = add_consecutive_segment_id(df_toy)
+    logger.info(f"Dati originali caricati: {df_toy.shape}")
+    logger.info(f"Classi presenti: {sorted(df_toy['action_id'].unique())}")
+
+
+
+
+    # ===== 3. CARICA FINESTRE PRE-PROCESSATE DA NPZ =====
+    logger.info("Caricamento finestre pre-processate da NPZ...")
+    try:
+        data = np.load(npz_path, allow_pickle=True)
+        
+        # Dati principali
+        X = data['X']
+        Y = data['Y'] 
+        kid_ids = data['kid_ids']
+        action_ids = data['action_ids']
+        original_files = data['original_files']
+        
+        # Metadati aggiuntivi
+        row_indices_start = data['row_indices_start']
+        row_indices_end = data['row_indices_end'] 
+        padding_counts = data['padding_counts']
+        
+        # Verifica coerenza
+        assert len(X) == len(Y) == len(kid_ids) == len(action_ids), "Lunghezze inconsistenti nel NPZ"
+        
+        logger.info(f"Finestre caricate con successo:")
+        logger.info(f"  - Shape finestre: {X.shape}")
+        logger.info(f"  - Numero etichette: {len(Y)}")
+        logger.info(f"  - Bambini unici: {sorted(np.unique(kid_ids))}")
+        logger.info(f"  - Azioni uniche: {sorted(np.unique(action_ids))}")
+        logger.info(f"  - Finestre con padding: {np.sum(padding_counts > 0)}")
+        
+    except Exception as e:
+        raise RuntimeError(f"Errore nel caricamento del file NPZ: {e}")
+
+
     
     
+
     
-    
-    
-    # === Reproducibilità: fissa tutti i semi ===
+    # ===== 4. SETUP RIPRODUCIBILITÀ =====
     np.random.seed(seed_used)
     random.seed(seed_used)
     torch.manual_seed(seed_used)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed_used)
-    # cuDNN deterministico
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    # ===== Nome esperimento (senza seed) =====
+
+
+    # ===== 5. SETUP DIRECTORIES =====
     exp_name = (
         f"T{args.toy}_PTN{args.pt_norm}_PTA{args.pt_aug}_"
         f"FTN{args.ft_norm}_FTA{args.ft_aug}_TS{args.tuning_strategy}"
     )
 
-    # ===== Cartelle root esperimento =====
+
     exp_root_models  = os.path.join(MODELS_DIR,  exp_name)
     exp_root_figures = os.path.join(FIGURES_DIR, exp_name)
     exp_root_reports = os.path.join(REPORTS_DIR, exp_name)
@@ -605,7 +613,7 @@ def main(args):
     os.makedirs(exp_root_figures, exist_ok=True)
     os.makedirs(exp_root_reports, exist_ok=True)
 
-    # ===== Cartelle seed-specifiche =====
+
     seed_tag = f"seed_{seed_used}"
     exp_models_dir  = os.path.join(exp_root_models,  seed_tag)
     exp_figures_dir = os.path.join(exp_root_figures, seed_tag)
@@ -625,267 +633,208 @@ def main(args):
     logger.info(f"Seed corrente: {seed_used}")
     logger.info(f"Cartelle: {exp_models_dir}, {exp_figures_dir}, {exp_reports_dir}")
 
+    logger.info(f"Finestre caricate da NPZ")
     
 
-
-    # --- Hold-out set per bambini specifici --- 
-
-    """if args.holdout_kids:
-        logger.info(f"Separazione dei bambini per il test hold-out: {args.holdout_kids}")
-        df_test_holdout = df_toy[df_toy['kid_id'].isin(args.holdout_kids)]
-        df_train_val = df_toy[~df_toy['kid_id'].isin(args.holdout_kids)]
-        logger.info(f"Dimensioni Training/Validation set: {df_train_val.shape}")
-        logger.info(f"Dimensioni Hold-out Test set: {df_test_holdout.shape}")
-    else:
-        logger.info("Nessun hold-out set specificato: Esecuzione K-Fold su tutto il dataset.")
-        df_train_val = df_toy.copy()
-        df_test_holdout = None"""
-
-    logger.info("La gestione dell'Hold-out avverrà DOPO la selezione delle finestre.")
-    df_train_val = df_toy.copy() # Lavoriamo sempre con il df completo!
-    df_test_holdout = None # Sarà gestito dopo
-    # --- Normalizzazione ---
-    df_normalized = pd.DataFrame()
+    # ===== 6. CALCOLO STATISTICHE DI NORMALIZZAZIONE =====
     mean, std = None, None
+    
     if args.ft_norm == 'meanstdonpt':
-        logger.info("Normalizzazione con statistiche del pre-training.")
-        mean_df, std_df = pd.read_csv(os.path.join(REPORTS_DIR, 'mean_trs.csv')), pd.read_csv(os.path.join(REPORTS_DIR, 'std_trs.csv'))
+        logger.info("Caricamento statistiche del pre-training per normalizzazione...")
+        mean_df = pd.read_csv(os.path.join(REPORTS_DIR, 'mean_trs.csv'))
+        std_df = pd.read_csv(os.path.join(REPORTS_DIR, 'std_trs.csv'))
         mean, std = mean_df['mean'].values[1:-1], std_df['std'].values[1:-1]
         logger.info("Parametri di normalizzazione caricati dal pre-training")
         logger.debug(f"Mean shape: {mean.shape}, Std shape: {std.shape}")
+        
     elif args.ft_norm == 'meanstdonft':
-        logger.info("Normalizzazione con statistiche calcolate sul dataset di fine-tuning.")
-        mean, std = normalization.compute_dataframe_mean_std(df_train_val)
+        logger.info("Calcolo statistiche di normalizzazione sul dataset di fine-tuning...")
+        
+        # Filtra solo i bambini di training per calcolare le statistiche
+        if args.holdout_kids:
+            df_train_for_stats = df_toy[~df_toy['kid_id'].isin(args.holdout_kids)]
+            logger.info(f"Calcolo statistiche solo sui bambini di training (escludendo holdout: {args.holdout_kids})")
+        else:
+            df_train_for_stats = df_toy
+            logger.info("Calcolo statistiche su tutto il dataset")
+            
+        mean, std = normalization.compute_dataframe_mean_std(df_train_for_stats)
+        logger.info(f"Statistiche calcolate - Mean: {mean[:3]}..., Std: {std[:3]}...")
+    else:
+        logger.info("Nessuna normalizzazione applicata al fine-tuning")
     
+
+    # ===== 7. APPLICAZIONE NORMALIZZAZIONE ALLE FINESTRE =====
     if mean is not None and std is not None:
-        df_normalized = normalization.normalize_dataframe_mean_std(df_train_val, mean, std)
+        logger.info("Applicazione normalizzazione alle finestre pre-processate...")
+        
+        # Normalizza tutte le finestre
+        original_shape = X.shape
+        X_reshaped = X.reshape(-1, X.shape[-1])  # (n_windows * timesteps, n_features)
+        
+        # Applica normalizzazione
+        X_normalized = (X_reshaped - mean) / std
+        X = X_normalized.reshape(original_shape)  # Ripristina forma originale
+        
+        logger.info(f"Normalizzazione applicata a tutte le finestre")
+        logger.info(f"Shape dopo normalizzazione: {X.shape}")
     else:
-        logger.info("Nessuna normalizzazione al fine tuning applicata.")
-        df_normalized = df_train_val
-
+        logger.info("Nessuna normalizzazione applicata alle finestre")
     
-    logger.info(f"COLONNE DOPO LA NORMALIZZAZIONE: {df_normalized.columns.tolist()}")
 
-    """if target_actions is not None:
-        logger.info(f"Filtro target_actions PRIMA della sliding window: {target_actions}")
-        logger.info(f"Azioni prima del filtro: {sorted(df_normalized['action_id'].unique())}")
-        df_normalized = df_normalized[df_normalized['action_id'].isin(target_actions)]
-        logger.info(f"Azioni dopo il filtro: {sorted(df_normalized['action_id'].unique())}")
-        logger.info(f"Righe rimanenti dopo filtro target_actions: {len(df_normalized)}")"""
-
-    # --- Salvataggio file per azione e Sliding Window ---
-    logger.info("Salvataggio file per azione e applicazione sliding window...")
-    X_list, Y_list, all_consecutivity, all_windows_metadata_raw ,kid_action_counts = [], [], [], [], defaultdict(dict)
-    
-    temp_action_dir = os.path.join(data_path, "temp_actions")
-    os.makedirs(temp_action_dir, exist_ok=True)
-    logger.info(f"[DEBUG HAR] Prima di Sliding Window: Shape={df_normalized.shape}, Sum Accel_X={df_normalized['Accel_WR_X'].sum()}")
-    for action_id in sorted(df_normalized['action_id'].unique()):
-        df_action = df_normalized[df_normalized['action_id'] == action_id]
-        temp_path = os.path.join(temp_action_dir, f'df_{args.toy}_action_{action_id}.csv')
-        df_action.to_csv(temp_path, index=False)
-        logger.debug(f"Salvato file temporaneo: {temp_path}")
-
-        X_w, Y_w, kid_dict, is_consecutive, window_metadata = sliding_window_on_data.new_process_csv(
-            temp_path, 9, 100, 50
-        )
-        X_list.append(X_w); Y_list.append(Y_w); all_consecutivity.extend(is_consecutive)
-        all_windows_metadata_raw.extend(window_metadata)
-
-        logger.info(f"Numero totale di finestre per l'azione {action_id}: {len(X_w)}")
-        logger.info(f"Finestre consecutive per l'azione {action_id}: {sum(is_consecutive)}")
-        logger.info(f"Finestre non consecutive per l'azione {action_id}: {len(is_consecutive) - sum(is_consecutive)}")
-        logger.info(f"Numero  totale di finestre per l'azione {action_id}:{len(X_w)}")
-        kid_action_counts[f"{args.toy}_action_{action_id}"] = kid_dict #dizionario principale per tenere traccia del numero di finestre per ogni bambino per ogni azione, ogni spoon_action è una chiave e il valore è un dizionario con il numero di finestre per ogni bambino
-        logger.info(f"Azione {action_id}: finestre={len(X_w)}, consecutive={sum(is_consecutive)}") #per vedere quante finestre per ogni azione e per ogni bambino sono state elaborte 
-            
-
-
-    shutil.rmtree(temp_action_dir) # Pulisce la cartella temporanea
-
-    X = np.concatenate(X_list, axis=0)
-    Y = np.concatenate(Y_list, axis=0).flatten()
-    all_consecutivity = np.array(all_consecutivity)
-
-    all_window_indices = []
-    for i, meta in enumerate(all_windows_metadata_raw):
-        # 🔧 CHIAVE STABILE: (original_file, tuple(row_indices))
-        window_key = (meta.get('original_file', 'unknown'), tuple(meta.get('row_indices', [])))
-        
-        all_window_indices.append({
-            'global_window_id': i,
-            'action_id': meta['action_id'],
-            'kid_id': meta.get('kid_id', 'unknown'),  # Aggiungi kid_id
-            'original_file': meta.get('original_file', 'unknown'),  # Aggiungi original_file
-            'row_indices': meta['row_indices'],
-            'window_key': window_key  # 🔧 CHIAVE STABILE
-        })
-
-    logger.info(f"Finestre totali generate: {len(X)}")
-    logger.info(f"Azioni presenti nelle finestre: {sorted(np.unique(Y))}")
-
-
-    logger.info("=== DEBUG CHIAVI FINESTRE ===")
-    for i in range(min(5, len(all_window_indices))):
-        meta = all_window_indices[i]
-        logger.info(f"Finestra {i}: key={meta['window_key'][:2]}...{meta['window_key'][-2:]} action={meta['action_id']}")
-    
-    sanity_check_window_alignment(
-    Y=Y,
-    window_meta=all_window_indices,
-    keep_idx=None,
-    phase="pre-seed",
-    sample_size=1000,
-    strict=True
-    )
-    # Distribuzione prima del filtro seed
-    log_and_plot_distribution(
-        Y=Y,
-        title_prefix="Distribuzione Iniziale (Prima del Filtro Seed)",
-        toy_name=args.toy,
-        toy_mapping=toy_mapping,
-        save_dir=exp_figures_dir
-    )
-
-    # --- FILTRO FINESTRE DA PICKLE (SEED-SPECIFIC) ---
-    if args.filtered_indices_pkl is None or not os.path.exists(args.filtered_indices_pkl):
-        raise FileNotFoundError("Passa --filtered-indices-pkl con il file .pkl generato da zupt_analysis.py")
-    with open(args.filtered_indices_pkl, 'rb') as f:
-        idx_pack = pickle.load(f)
-
-    # 🔧 CARICA LE CHIAVI STABILI invece degli indici numerici
-    windows_keys_to_keep = idx_pack.get('windows_keys_to_keep', None)
-    keep_idx_fallback = idx_pack.get('windows_indices_to_keep', None)
-
-    if windows_keys_to_keep is not None:
-        # 🔧 NUOVO METODO: Usa le chiavi stabili
-        logger.info("Usando chiavi stabili per il matching delle finestre")
-        
-        # Crea mappa: window_key -> indice locale
-        key_to_local_index = {meta['window_key']: i for i, meta in enumerate(all_window_indices)}
-        
-        # Trova gli indici corrispondenti alle chiavi da mantenere
-        keep_idx = []
-        missing_keys_count = 0
-        
-        for key_to_find in windows_keys_to_keep:
-            if key_to_find in key_to_local_index:
-                keep_idx.append(key_to_local_index[key_to_find])
-            else:
-                missing_keys_count += 1
-        
-        keep_idx = np.array(keep_idx, dtype=int)
-        
-        logger.info(f"Finestre totali generate localmente: {len(X)}")
-        logger.info(f"Chiavi da mantenere (dal pickle): {len(windows_keys_to_keep)}")
-        logger.info(f"Chiavi trovate e matchate: {len(keep_idx)}")
-        
-        if missing_keys_count > 0:
-            logger.error(f"ATTENZIONE: {missing_keys_count} chiavi dal file pickle non sono state trovate tra le finestre generate!")
-            logger.error("Questo indica ancora una discrepanza nella generazione dei dati iniziali. Controlla che i file CSV e i filtri siano identici.")
-            
-    elif keep_idx_fallback is not None:
-        # 🔧 FALLBACK: Usa il metodo vecchio (indici numerici)
-        logger.warning("Usando metodo fallback con indici numerici (potrebbe essere impreciso)")
-        keep_idx = np.array(keep_idx_fallback, dtype=int)
-        
-        # Verifica range
-        if keep_idx.min() < 0 or keep_idx.max() >= len(X):
-            logger.error(f"ERRORE: Indici fuori range con metodo fallback!")
-            logger.error(f"   Finestre generate: {len(X)}")
-            logger.error(f"   Indici min/max: {keep_idx.min()}/{keep_idx.max()}")
-            raise AssertionError("Indici keep fuori range - rigenera il pickle con la versione aggiornata")
-            
-    else:
-        raise KeyError("Nel PKL non trovo né 'windows_keys_to_keep' né 'windows_indices_to_keep'")
-
-    # Rimuovi duplicati se presenti
-    unique_keep_idx = np.unique(keep_idx)
-    if len(unique_keep_idx) != len(keep_idx):
-        logger.warning("keep_idx ha duplicati — li rimuovo preservando l'ordine.")
-        seen = set()
-        keep_idx = np.array([i for i in keep_idx if not (i in seen or seen.add(i))], dtype=int)
-
-    # Applica il filtro
-    X = X[keep_idx]
-    Y = Y[keep_idx]
-    all_consecutivity = all_consecutivity[keep_idx]
-    all_window_indices = [all_window_indices[i] for i in keep_idx]
-
-    logger.info(f"Filtro seed applicato: finestre tenute = {len(X)}")
-    logger.info(f"Azioni finali dopo filtro: {sorted(np.unique(Y))}")
-
-
-    # --- CHECK 2: coerenza Y/meta DOPO il filtro seed (verifica anche global_window_id vs keep_idx) ---
-    sanity_check_window_alignment(
-        Y=Y,
-        window_meta=all_window_indices,
-        keep_idx=keep_idx,
-        phase="post-seed",
-        sample_size=1000,
-        strict=True
-    )
-    # Distribuzione dopo filtro seed
-    log_and_plot_distribution(
-        Y=Y,
-        title_prefix="Distribuzione Dopo Filtro Seed",
-        toy_name=args.toy,
-        toy_mapping=toy_mapping,
-        save_dir=exp_figures_dir
-    )
-
-
-    X_holdout_test = None
-    Y_holdout_test = None
-    meta_holdout_test = None
-    consec_holdout_test = None
     if args.holdout_kids:
-        logger.info(f"ESEGUO SPLIT HOLDOUT SULLE FINESTRE FILTRATE per i kid: {args.holdout_kids}")
+        logger.info(f"Separazione bambini per holdout test: {args.holdout_kids}")
+        
+        # Crea maschere per dividere train/val e test holdout
+        holdout_mask = np.isin(kid_ids, args.holdout_kids)
+        train_val_mask = ~holdout_mask
+        
+        # ===== SPLIT INIZIALE =====
+        # Dati training/validation
+        X_train_val = X[train_val_mask]
+        Y_train_val = Y[train_val_mask]
+        kid_ids_train_val = kid_ids[train_val_mask]
+        action_ids_train_val = action_ids[train_val_mask]
+        original_files_train_val = original_files[train_val_mask]
+        row_start_train_val = row_indices_start[train_val_mask]
+        row_end_train_val = row_indices_end[train_val_mask]
+        padding_train_val = padding_counts[train_val_mask]
+        
+        # Dati holdout test
+        X_test_holdout = X[holdout_mask]
+        Y_test_holdout = Y[holdout_mask]
+        kid_ids_test_holdout = kid_ids[holdout_mask]
+        action_ids_test_holdout = action_ids[holdout_mask]
+        original_files_test_holdout = original_files[holdout_mask]
+        row_start_test_holdout = row_indices_start[holdout_mask]
+        row_end_test_holdout = row_indices_end[holdout_mask]
+        padding_test_holdout = padding_counts[holdout_mask]
+        
+        logger.info(f"Training/Validation set iniziale: {X_train_val.shape}")
+        logger.info(f"Holdout Test set iniziale: {X_test_holdout.shape}")
+        logger.info(f"Bambini in training: {sorted(np.unique(kid_ids_train_val))}")
+        logger.info(f"Bambini in test: {sorted(np.unique(kid_ids_test_holdout))}")
 
-        # Liste per contenere i dati divisi
-        X_train_val_list, Y_train_val_list, meta_train_val_list, consec_train_val_list = [], [], [], []
-        X_test_list, Y_test_list, meta_test_list, consec_test_list = [], [], [], []
+        # ===== 9. MAPPATURA AZIONI =====
+        logger.info("Mappatura delle azioni per la classificazione...")
+        
+        # Usa solo le azioni del training per creare la mappatura
+        unique_labels = np.unique(Y_train_val)
+        label_mapping = {label: i for i, label in enumerate(unique_labels)}
+        Y_train_val_mapped = np.array([label_mapping[y] for y in Y_train_val])
+        
+        # Mappa anche le etichette del test holdout
+        Y_test_holdout_mapped = np.array([label_mapping[y] for y in Y_test_holdout])
+        num_classes = len(unique_labels)
+        
+        logger.info(f"Azioni originali: {sorted(unique_labels)}")
+        logger.info(f"Mappatura azioni: {label_mapping}")
+        logger.info(f"Numero classi finali: {num_classes}")
+        
+        # ===== 10. VERIFICA NECESSITÀ BILANCIAMENTO =====
+        train_actions_set = set(Y_train_val_mapped)
+        test_actions_set = set(Y_test_holdout_mapped)
+        missing_in_test = train_actions_set - test_actions_set
 
-        # Itera su tutte le finestre selezionate
+        if missing_in_test:
+            logger.info(f"Applicazione bilanciamento per classi mancanti nel test: {missing_in_test}")
+            
+            # ===== APPLICA BILANCIAMENTO NPZ =====
+            (X_train_val, Y_train_val_mapped, kid_ids_train_val, action_ids_train_val,
+             original_files_train_val, row_start_train_val, row_end_train_val, padding_train_val,
+             X_test_holdout, Y_test_holdout_mapped, kid_ids_test_holdout, action_ids_test_holdout,
+             original_files_test_holdout, row_start_test_holdout, row_end_test_holdout, 
+             padding_test_holdout) = balance_holdout_classes_npz(
+                X_train_val, Y_train_val_mapped, kid_ids_train_val, action_ids_train_val,
+                X_test_holdout, Y_test_holdout_mapped, kid_ids_test_holdout, action_ids_test_holdout,
+                original_files_train_val, original_files_test_holdout,
+                row_start_train_val, row_start_test_holdout,
+                row_end_train_val, row_end_test_holdout,
+                padding_train_val, padding_test_holdout,
+                percentage_to_move=0.15, random_seed=seed_used
+            )
+            
+            logger.info("Bilanciamento applicato con successo!")
+        else:
+            # Nessun bilanciamento necessario, ma dobbiamo comunque usare le etichette mappate
+            Y_train_val_mapped = Y_train_val_mapped  # già calcolato sopra
+            logger.info("Nessun bilanciamento necessario: tutte le classi presenti nel test")
+        
+        # ===== 11. RICOSTRUISCI METADATI PER COMPATIBILITÀ =====
+        # Crea metadati nel formato atteso dal resto del codice
+        all_window_indices = []
+        all_consecutivity = np.ones(len(X_train_val), dtype=bool)  # Assume tutte consecutive
+        
+        for i in range(len(X_train_val)):
+            all_window_indices.append({
+                'global_window_id': i,
+                'action_id': int(action_ids_train_val[i]),
+                'kid_id': str(kid_ids_train_val[i]),
+                'original_file': str(original_files_train_val[i]),
+                'row_indices': list(range(int(row_start_train_val[i]), int(row_end_train_val[i]) + 1)) if row_start_train_val[i] != -1 else [],
+                'padding_count': int(padding_train_val[i])
+            })
+        
+        # Aggiorna le variabili principali per il resto del workflow
+        X = X_train_val
+        Y_mapped = Y_train_val_mapped
+        
+        logger.info(f"Dati finali per K-Fold: X.shape={X.shape}, Y_mapped.shape={Y_mapped.shape}")
+        logger.info(f"Dati holdout per test finale: X_test.shape={X_test_holdout.shape}")
+    else:
+        logger.info("Nessun holdout specificato: usando tutto il dataset per K-Fold")
+        X_test_holdout = None
+        Y_test_holdout_mapped = None
+        
+        # ===== MAPPATURA AZIONI (caso senza holdout) =====
+        unique_labels = np.unique(Y)
+        label_mapping = {label: i for i, label in enumerate(unique_labels)}
+        Y_mapped = np.array([label_mapping[y] for y in Y])
+        num_classes = len(unique_labels)
+        
+        # Ricostruisci metadati standard
+        all_window_indices = []
+        all_consecutivity = np.ones(len(X), dtype=bool)
+        
         for i in range(len(X)):
-            kid_id = all_window_indices[i]['kid_id']
-            if kid_id in args.holdout_kids:
-                X_test_list.append(X[i])
-                Y_test_list.append(Y[i])
-                meta_test_list.append(all_window_indices[i])
-                consec_test_list.append(all_consecutivity[i])
-            else:
-                X_train_val_list.append(X[i])
-                Y_train_val_list.append(Y[i])
-                meta_train_val_list.append(all_window_indices[i])
-                consec_train_val_list.append(all_consecutivity[i])
-        
-        # Riconverti le liste in array numpy
-        X = np.array(X_train_val_list)
-        Y = np.array(Y_train_val_list)
-        all_window_indices = meta_train_val_list
-        all_consecutivity = np.array(consec_train_val_list)
-
-        X_holdout_test = np.array(X_test_list)
-        Y_holdout_test = np.array(Y_test_list)
-        # Assegna i valori alle variabili che abbiamo definito prima
-        meta_holdout_test = meta_test_list
-        consec_holdout_test = np.array(consec_test_list)
-        
-        logger.info(f"Split completato: {len(X)} finestre per train/val, {len(X_holdout_test)} per holdout test.")
-
-    unique_labels = np.unique(Y)
-    label_mapping = {label: i for i, label in enumerate(unique_labels)}
-    Y_mapped = np.array([label_mapping[y] for y in Y])
-    num_classes = len(unique_labels)
-
-    # Dizionario: id_mappato -> nome classe
-    labels_dict_orig = toy_mapping["encoded_to_name"]
-    labels_dict_mapped = {
-        label_mapping[int(orig)]: labels_dict_orig.get(int(orig), f"Class_{orig}")
-        for orig in unique_labels
-    }
+            all_window_indices.append({
+                'global_window_id': i,
+                'action_id': int(action_ids[i]),
+                'kid_id': str(kid_ids[i]),
+                'original_file': str(original_files[i]),
+                'row_indices': list(range(int(row_indices_start[i]), int(row_indices_end[i]) + 1)) if row_indices_start[i] != -1 else [],
+                'padding_count': int(padding_counts[i])
+            })
     
+
+
+    # Crea dizionario per visualizzazione 
+    toy_mapping_orig = mapping_activity.get_toy_mapping(args.toy.upper())
+    labels_dict_mapped = {}
+    
+    for mapped_id in range(num_classes):
+        # Trova l'ID originale corrispondente
+        original_id = None
+        for orig, mapped in label_mapping.items():
+            if mapped == mapped_id:
+                original_id = orig
+                break
+        
+        # Ottieni il nome della classe dall'ID originale
+        if original_id is not None:
+            class_name = toy_mapping_orig["original_to_name"].get(int(original_id), f"Unknown_{original_id}")
+            labels_dict_mapped[mapped_id] = class_name
+        else:
+            labels_dict_mapped[mapped_id] = f"Class_{mapped_id}"
+    
+    logger.info(f"Dizionario classi per visualizzazione: {labels_dict_mapped}")
+
+    # Mappa anche le etichette del test holdout se presente
+    if args.holdout_kids:
+        Y_test_holdout_mapped = np.array([label_mapping[y] for y in Y_test_holdout])
+        logger.info(f"Test holdout mappato: {len(Y_test_holdout_mapped)} campioni")
+    
+    # ===== 10. CALCOLO PESI DELLE CLASSI =====
 
     # Calcola i pesi in base alla frequenza inversa delle classi.
     class_weights = compute_class_weight(
@@ -898,128 +847,46 @@ def main(args):
     
     logger.info(f"Pesi delle classi calcolati: {dict(zip(np.unique(Y_mapped), class_weights))}")
 
-    logger.info(f"Dati di training/validation pronti: X.shape={X.shape}, num_classes={num_classes}")
+    # ===== 11. DISTRIBUZIONE INIZIALE =====
+    # Converti Y_mapped di nuovo alle azioni originali per la visualizzazione
+    inv_label_mapping = {v: k for k, v in label_mapping.items()}
+    Y_original_for_plot = np.array([inv_label_mapping[y] for y in Y_mapped])
+    
+    log_and_plot_distribution(
+        Y=Y_original_for_plot,
+        title_prefix="Distribuzione Finestre da NPZ",
+        toy_name=args.toy,
+        toy_mapping=toy_mapping,
+        save_dir=exp_figures_dir
+    )
+
+    # ===== 12. SETUP MODELLO PRE-ADDESTRATO =====
     pretrained_model_path = get_pretrained_model_path(args.pt_norm, args.pt_aug)
     logger.info(f"Utilizzo del modello pre-addestrato: {pretrained_model_path}")
+
+
+    # ===== 13. CREA METADATI FINESTRE PER COMPATIBILITÀ =====
+    # Ricostruisci i metadati nel formato atteso dal resto del codice
+    all_window_indices = []
+    all_consecutivity = np.ones(len(X), dtype=bool)  # Assume tutte consecutive per ora
+    
+    for i in range(len(X)):
+        all_window_indices.append({
+            'global_window_id': i,
+            'action_id': int(action_ids[i]),
+            'kid_id': str(kid_ids[i]),
+            'original_file': str(original_files[i]),
+            'row_indices': list(range(int(row_indices_start[i]), int(row_indices_end[i]) + 1)) if row_indices_start[i] != -1 else [],
+            'padding_count': int(padding_counts[i])
+        })
+
+    logger.info(f"Metadati finestre ricostruiti: {len(all_window_indices)} finestre")
+    # ===== 14. PROCEDURE PRINCIPALI =====
+    logger.info(f"Dati pronti per l'esperimento: X.shape={X.shape}, num_classes={num_classes}")
 
     if args.holdout_kids:
         logger.info("AVVIO PROCEDURA: K-Fold su Train/Val set + Valutazione finale su Hold-out")
 
-    # Invece di generare nuove finestre, ora usiamo quelle che abbiamo già separato.
-    # Il codice che generava finestre per il test set da un DataFrame va eliminato.
-    # I nostri dati di test sono già pronti nelle variabili X_holdout_test, Y_holdout_test, etc.
-
-        # Rinominiamo le variabili per coerenza con il resto dello script
-        X_test_final = X_holdout_test
-        Y_test_final = Y_holdout_test
-        all_window_indices_test = meta_holdout_test # Assumendo che tu abbia salvato i metadati
-        all_consecutivity_test = consec_holdout_test # e la consecutività
-
-        # Aggiungiamo un controllo per sicurezza
-        if X_test_final is None:
-            raise ValueError("I dati di holdout test non sono stati creati. Controlla il blocco di split precedente.")
-
-        logger.info(f"Dati di test finali pronti: X_test_final.shape={X_test_final.shape}")
-
-        # Applica lo STESSO remapping di etichette usato per il training.
-        Y_test_final_mapped = np.array([label_mapping.get(y) for y in Y_test_final if y in label_mapping])
-        
-        # Aggiungi un controllo per chiavi mancanti nel mapping
-        if len(Y_test_final_mapped) != len(Y_test_final):
-            logger.warning("Alcune etichette del test set non erano presenti nel training set e sono state ignorate.")
-            # Potresti voler gestire questo caso in modo più robusto
-            valid_indices = [i for i, y in enumerate(Y_test_final) if y in label_mapping]
-            Y_test_final = Y_test_final[valid_indices]
-            X_test_final = X_test_final[valid_indices]
-            all_window_indices_test = [all_window_indices_test[i] for i in valid_indices]
-            all_consecutivity_test = all_consecutivity_test[valid_indices]
-            Y_test_final_mapped = np.array([label_mapping[y] for y in Y_test_final])
-
-        logger.info(f"Holdout test set prima del bilanciamento: X_test_holdout.shape={X_test_final.shape}")
-        logger.info(f"Y_train dtypes: {Y_mapped.dtype}, Y_test dtypes: {Y_test_final_mapped.dtype}")
-        logger.info(f"Y_train sample: {Y_mapped[:5]}, Y_test sample: {Y_test_final_mapped[:5]}")
-        
-        # APPLICA IL BILANCIAMENTO DELLE CLASSI (ora questa chiamata dovrebbe funzionare)
-        (X_balanced, Y_balanced, X_test_final, Y_test_mapped_balanced,
-        indices_balanced, indices_test_final, 
-        consec_balanced, consec_test_final) = balance_holdout_classes(
-            X_train=X, Y_train=Y_mapped, 
-            X_test=X_test_final, Y_test=Y_test_final_mapped,
-            all_window_indices_train=all_window_indices,
-            all_window_indices_test=all_window_indices_test,
-            all_consecutivity_train=all_consecutivity,
-            all_consecutivity_test=all_consecutivity_test,
-            percentage_to_move=0.15,
-            random_seed=seed_used
-        )
-        
-        # Aggiorna le variabili con i dati bilanciati
-        X = X_balanced
-        Y_mapped = Y_balanced
-        all_window_indices = indices_balanced
-        all_consecutivity = consec_balanced
-
-        # --- CHECK 3: coerenza sul test hold-out ---
-        sanity_check_window_alignment(
-            Y=Y_test_final,
-            window_meta=all_window_indices_test,
-            keep_idx=None,            # qui non c'è keep_idx
-            phase="holdout-test",
-            sample_size=1000,
-            strict=True
-        )
-        logger.info(f"Dati di test finali pronti: X_test_final.shape={X_test_final.shape}")
-
-        # Applica lo STESSO remapping di etichette usato per il training.
-        Y_test_final_mapped = np.array([label_mapping[y] for y in Y_test_final])
-
-
-
-        logger.info(f"Holdout test set prima del bilanciamento: X_test_holdout.shape={X_test_final.shape}")
-        logger.info(f"Y_train dtypes: {Y_mapped.dtype}, Y_test dtypes: {Y_test_final_mapped.dtype}")
-        logger.info(f"Y_train sample: {Y_mapped[:5]}, Y_test sample: {Y_test_final_mapped[:5]}")
-        # APPLICA IL BILANCIAMENTO DELLE CLASSI
-        (X_balanced, Y_balanced, X_test_final, Y_test_mapped_balanced,
-        indices_balanced, indices_test_final, 
-        consec_balanced, consec_test_final) = balance_holdout_classes(
-            X_train=X, Y_train=Y_mapped, 
-            X_test=X_test_final, Y_test=Y_test_final_mapped,
-            all_window_indices_train=all_window_indices[:len(X)],  # <-- usa solo i metadati delle finestre di training
-            all_window_indices_test=all_window_indices_test,
-            all_consecutivity_train=all_consecutivity[:len(X)],
-            all_consecutivity_test=all_consecutivity_test,
-            percentage_to_move=0.15,
-            random_seed=seed_used
-        )
-        
-        # Aggiorna le variabili con i dati bilanciati
-        X = X_balanced
-        Y_mapped = Y_balanced
-        all_window_indices = indices_balanced
-        all_consecutivity = consec_balanced
-
-
-        inv_label_mapping = {v: k for k, v in label_mapping.items()}
-        Y_balanced_orig = np.array([inv_label_mapping[y] for y in Y_balanced])
-        
-        # Log delle distribuzioni aggiornate
-        log_and_plot_distribution(
-            Y=Y_balanced_orig, 
-            title_prefix="Training Set Dopo Bilanciamento Holdout",
-            toy_name=args.toy,
-            toy_mapping=toy_mapping,
-            save_dir=exp_figures_dir
-        )
-
-        Y_test_final_orig = np.array([inv_label_mapping[y] for y in Y_test_mapped_balanced])
-        log_and_plot_distribution(
-            Y=Y_test_final_orig,
-            title_prefix="Holdout Test Set Dopo Bilanciamento", 
-            toy_name=args.toy,
-            toy_mapping=toy_mapping,
-            save_dir=exp_figures_dir
-        )
-        
         skf = StratifiedKFold(n_splits=args.k_folds, shuffle=True, random_state=seed_used)
         all_fold_scores = []
 
@@ -1056,6 +923,7 @@ def main(args):
             train_val_consec = all_consecutivity[train_val_idx]
             test_consec = all_consecutivity[test_idx]
             
+            # Split train/validation interno
             split_idx = int(0.8 * len(X_train_val))
             X_train_fold, Y_train_fold = X_train_val[:split_idx], Y_train_val[:split_idx]
             X_val_fold, Y_val_fold = X_train_val[split_idx:], Y_train_val[split_idx:]
@@ -1064,7 +932,9 @@ def main(args):
             val_indices_meta = train_val_indices_meta[split_idx:]
             train_consec = train_val_consec[:split_idx]
             val_consec = train_val_consec[split_idx:]
-            
+
+
+            # Data augmentation se richiesta
             if args.ft_aug == 'alltrs':
                 logger.info("Applicazione data augmentation al set di training del fold.")
                 transformation_function = generate_composite_transform_function_simple([
@@ -1282,15 +1152,23 @@ def main(args):
     else:
         logger.info("AVVIO PROCEDURA: K-Fold su tutti i dati per trovare HP + Training/Valutazione finale")
 
-        logger.info("\n--- Fase 1: Esecuzione K-Fold per trovare i migliori iperparametri e performance media ---")
-        # Inizializza StratifiedKFold.
-        skf = StratifiedKFold(n_splits=args.k_folds, shuffle=True, random_state=seed_used)
+        # Ricostruisci metadati per tutto il dataset
+        all_window_indices = []
+        all_consecutivity = np.ones(len(X), dtype=bool)
         
-        # Lista per conservare i risultati dettagliati di ogni fold.
+        for i in range(len(X)):
+            all_window_indices.append({
+                'global_window_id': i,
+                'action_id': int(action_ids[i]),
+                'kid_id': str(kid_ids[i]),
+                'original_file': str(original_files[i]),
+                'row_indices': list(range(int(row_indices_start[i]), int(row_indices_end[i]) + 1)) if row_indices_start[i] != -1 else [],
+                'padding_count': int(padding_counts[i])
+            })
+
+
+        skf = StratifiedKFold(n_splits=args.k_folds, shuffle=True, random_state=seed_used)
         all_fold_scores = []
-
-
-        # Dizionario per i risultati
         fold_results = {
             'fold': [], 'best_f1_score': [], 'best_params': [], 'test_f1_score': []
         }

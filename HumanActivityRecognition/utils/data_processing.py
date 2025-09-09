@@ -89,9 +89,14 @@ def sliding_window(a, ws, ss=None, flatten=True, min_pad_samples=30, extreme_pad
             logger.warning("Non ci sono abbastanza campioni per creare una finestra valida. Campioni scartati.")
         else:
             num_padding = ws[0] - num_actual_samples  # Quantità di padding necessaria
-            padding_start = num_padding // 2
-            padding_end   = num_padding - padding_start
-            logger.info(f"Padding iniziale: {padding_start}, Padding finale: {padding_end}")
+            if num_padding > 1:
+                padding_start = np.random.randint(1, num_padding) # Estraggo un numero casuale tra 1 e num_padding
+                padding_end   = num_padding - padding_start
+                logger.info(f"Padding iniziale: {padding_start}, Padding finale: {padding_end}")
+            else:
+                padding_start = 0
+                padding_end = num_padding
+                logger.info(f"Padding iniziale: {padding_start}, Padding finale: {padding_end}")
             # Aggiungo padding all'inizio e alla fine
             padded_samples = np.concatenate((np.zeros((padding_start,) + a.shape[1:]), a), axis=0) # Aggiungo padding all'inizio
             padded_samples = np.concatenate((padded_samples, np.zeros((padding_end,) + a.shape[1:])), axis=0) # Aggiungo padding alla fine
@@ -131,9 +136,14 @@ def sliding_window(a, ws, ss=None, flatten=True, min_pad_samples=30, extreme_pad
     logger.debug(f"Campioni rimanenti dopo l'ultima finestra completa: {remaining_samples}")
     if remaining_samples > 0:
         if remaining_samples > extreme_pad_samples:
-            num_padding = ws[0] - remaining_samples 
-            padding_start = num_padding // 2
-            padding_end = num_padding - padding_start
+            num_padding = ws[0] - remaining_samples
+            if num_padding > 1:
+                padding_start = np.random.randint(1, num_padding)
+                padding_end = num_padding - padding_start
+            else:
+                padding_start = 0
+                padding_end = num_padding
+            logger.info(f"Padding iniziale per l'ultima finestra: {padding_start}, Padding finale per l'ultima finestra: {padding_end}")
             last_window = np.concatenate((a[-remaining_samples:], np.zeros((padding_end, a.shape[1]))), axis=0)
             last_window = np.concatenate((np.zeros((padding_start, a.shape[1])), last_window), axis=0)
             last_window = last_window[None, :, :]
