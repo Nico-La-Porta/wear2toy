@@ -113,7 +113,7 @@ ELEPHANT_ACTION_MAPPING = {
         11: "throw",
         6: "lift",
         18: "offer",
-        27: "hit",
+        27: "beat",
         13: "flip",
         36: "align",
         4: "put down",
@@ -139,7 +139,7 @@ ELEPHANT_ACTION_MAPPING = {
         16: 9,  # hit
         18: 10, # offer
         21: 11, # stack
-        27: 12, # hit
+        27: 12, # beat
         32: 13, # bring close
         36: 14, # align
         41: 15  # move

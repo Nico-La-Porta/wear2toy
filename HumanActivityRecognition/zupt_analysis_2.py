@@ -692,7 +692,7 @@ def apply_downsampling(X, Y, window_metadata, max_windows_per_kid_action=50, see
     return results
 
 
-def create_distribution_plot(Y, toy_name, title_suffix, save_path=None):
+def create_distribution_plot(Y, toy_name, title_suffix, save_path=None, toy_mapping=None):
     """
     Crea un bar plot per la distribuzione delle classi.
     """
@@ -715,8 +715,25 @@ def create_distribution_plot(Y, toy_name, title_suffix, save_path=None):
     ax.set_xlabel('Action ID', fontsize=16, fontweight='bold')
     ax.set_ylabel('Percentage (%)', fontsize=16, fontweight='bold')
     ax.set_title(f'{toy_name.upper()} - {title_suffix}', fontsize=16, fontweight='bold', pad=20)
+
+    # Converti ID azioni in nomi se disponibile il mapping
+    if toy_mapping and 'original_to_name' in toy_mapping:
+        class_labels = []
+        for cls in all_classes:
+            action_name = toy_mapping['original_to_name'].get(int(cls), f'Action_{cls}')
+            # Tronca nomi troppo lunghi per leggibilità
+            if len(action_name) > 15:
+                action_name = action_name[:12] + "..."
+            class_labels.append(action_name)
+    else:
+        # Fallback agli ID se non c'è mapping
+        class_labels = [f'Action_{cls}' for cls in all_classes]
+
+
+
+
     ax.set_xticks(range(len(all_classes)))
-    ax.set_xticklabels([f'{cls}' for cls in all_classes], fontsize=12)
+    ax.set_xticklabels(class_labels, fontsize=10, rotation=45, ha='right')
     ax.tick_params(axis='y', labelsize=12)
     
     ax.grid(axis='y', alpha=0.3, linestyle='-', linewidth=0.5)
@@ -747,7 +764,11 @@ def create_distribution_plot(Y, toy_name, title_suffix, save_path=None):
     logger.info(f"Campioni totali: {total_samples}")
     logger.info(f"Numero classi: {len(all_classes)}")
     for i, cls in enumerate(all_classes):
-        logger.info(f"  Classe {cls}: {counts[i]} campioni ({percentages[i]:.1f}%)")
+        if toy_mapping and 'original_to_name' in toy_mapping:
+            action_name = toy_mapping['original_to_name'].get(int(cls), f'Action_{cls}')
+            logger.info(f"  {action_name} (ID {cls}): {counts[i]} campioni ({percentages[i]:.1f}%)")
+        else:
+            logger.info(f"  Classe {cls}: {counts[i]} campioni ({percentages[i]:.1f}%)")
     
     return fig
 
@@ -929,7 +950,8 @@ def main():
     # Plot distribuzione iniziale
     create_distribution_plot(
         Y, args.toy, "Distribuzione Iniziale", 
-        save_path=os.path.join(figures_dir, f"{args.toy}_distribuzione_iniziale")
+        save_path=os.path.join(figures_dir, f"{args.toy}_distribuzione_iniziale"),
+        toy_mapping=toy_mapping
     )
     
     # 5. MAPPING PAUSE -> FINESTRE
@@ -958,7 +980,8 @@ def main():
     # Plot distribuzione dopo filtraggio ZUPT
     create_distribution_plot(
         Y_filtered, args.toy, "Distribuzione Dopo Filtraggio ZUPT", 
-        save_path=os.path.join(figures_dir, f"{args.toy}_distribuzione_dopo_zupt")
+        save_path=os.path.join(figures_dir, f"{args.toy}_distribuzione_dopo_zupt"),
+        toy_mapping=toy_mapping
     )
     
     # 7. DOWNSAMPLING
@@ -971,7 +994,8 @@ def main():
         Y_final,
         args.toy,
         f"Distribuzione Finale (seed={seed})",
-        save_path=os.path.join(figures_dir, f"{args.toy}_distribuzione_finale_seed{seed}")
+        save_path=os.path.join(figures_dir, f"{args.toy}_distribuzione_finale_seed{seed}"),
+        toy_mapping=toy_mapping
         )
     
     # 8. SALVATAGGIO RISULTATI
