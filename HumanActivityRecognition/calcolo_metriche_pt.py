@@ -6,7 +6,7 @@ import numpy as np
 import csv
 from typing import Dict, List, Tuple
 
-# pattern: f1-score__test_<EXPERIMENTO>_seed_<SEED>[.qualcosa]
+# pattern: f1-score__test_<EXPERIMENTO>_seed_<SEED>[.txt]
 FNAME_RE = re.compile(r"^f1-score__test_(?P<exp>.+?)_seed_(?P<seed>\d+)(?:\.[^.]+)?$")
 
 # estrae Macro/Micro/Weighted dal contenuto del file
