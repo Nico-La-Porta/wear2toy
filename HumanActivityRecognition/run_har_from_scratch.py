@@ -620,7 +620,7 @@ def run_single_experiment(args, seed_used, target_actions, ft_norm, ft_aug, tuni
                 logger.info("Applico data augmentation al set di training (fold).")
                 transformation_function = generate_composite_transform_function_simple([
                     noise_transform_vectorized, scaling_transform_vectorized, negate_transform_vectorized,
-                    time_flip_transform_vectorized, channel_shuffle_transform_vectorized,
+                    time_flip_transform_vectorized, intra_sensor_channel_shuffle_transform_vectorized,
                     time_warp_transform_improved, time_warp_transform_low_cost
                 ])
                 X_train_aug = transformation_function(X_train_fold)
@@ -752,7 +752,7 @@ def run_single_experiment(args, seed_used, target_actions, ft_norm, ft_aug, tuni
                 logger.info("Applico data augmentation al set di training (fold).")
                 transformation_function = generate_composite_transform_function_simple([
                     noise_transform_vectorized, scaling_transform_vectorized, negate_transform_vectorized,
-                    time_flip_transform_vectorized, channel_shuffle_transform_vectorized,
+                    time_flip_transform_vectorized, intra_sensor_channel_shuffle_transform_vectorized,
                     time_warp_transform_improved, time_warp_transform_low_cost
                 ])
                 X_train_aug = transformation_function(X_train_fold)

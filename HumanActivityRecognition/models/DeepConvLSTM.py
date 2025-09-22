@@ -142,16 +142,29 @@ class DeepConvLSTM(nn.Module):
     def forward(self, x, hidden, batch_size, single_fc=True):
 
         #print(f"Input iniziale al modello: {x.shape}")
+
+        #PROSSIME 8 RIGHE COMMANTATE SOLO CON WISDIM
         # Se  feature aggiuntive (indici, consecutività), estraggo solo i sensori
-        if x.shape[2] > self.nb_sensor_channels:
+        #if x.shape[2] > self.nb_sensor_channels:
             # Prendo solo le prime nb_sensor_channels feature (i sensori)
-            x_sensors = x[:, :, :self.nb_sensor_channels]
-            print(f"Shape dopo estrazione sensori: {x_sensors.shape}")
-            x = x_sensors
+            #x_sensors = x[:, :, :self.nb_sensor_channels]
+            #print(f"Shape dopo estrazione sensori: {x_sensors.shape}")
+            #x = x_sensors
+        #else:
+            #x_sensors = x
+        
+
+        #PROSSIMO IF AND ELSE USATO SOLO CON WISDIM
+        # Input should be (batch_size, nb_sensor_channels, sliding_window_length)
+        if x.dim() == 3 and x.shape[1] == self.nb_sensor_channels and x.shape[2] == self.sliding_window_length:
+            # Already in correct format
+            pass
         else:
-            x_sensors = x
+            # Reshape if needed
+            x = x.reshape(-1, self.nb_sensor_channels, self.sliding_window_length)
+
         #-1 sta calcolando automaticamente la dimensione rimanente (batchsize),
-        x = x.reshape(-1, self.nb_sensor_channels, self.sliding_window_length)
+        #x = x.reshape(-1, self.nb_sensor_channels, self.sliding_window_length) RIGA COMMENTATA SOLO CON WISDIM
         #print(f"Dopo reshape per convoluzione: {x.shape}")
         x = F.relu(self.conv1(x))
         #print(f"Dopo conv1: {x.shape}")

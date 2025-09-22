@@ -108,7 +108,7 @@ def train(net, train_loader, val_loader,
         - Se c'è validazione: (best_val_f1, best_state_val)
         - Se NON c'è validazione: (best_train_f1, best_state_train)
     """
-
+    print("Inizio training...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net.to(device)
     # Imposta l'ottimizzatore e la funzione di loss.
@@ -393,7 +393,7 @@ def evaluate_model(net, test_loader, exp_figures_dir: str,
     # DataFrame con tutte le informazioni necessarie per l'analisi degli errori
     predictions_df = pd.DataFrame({
             # Estraiamo l'ID globale da ogni dizionario di metadati
-            'global_window_id': [meta['global_window_id'] for meta in all_test_metadata],
+            'global_window_id': all_test_metadata,
             'true_label': all_test_labels,
             'predicted_label': all_test_preds,
             'is_consecutive': all_test_consecutivity,

@@ -110,6 +110,41 @@ def channel_shuffle_transform_vectorized(X):
     X_transformed = X[np.arange(X.shape[0])[:, np.newaxis, np.newaxis], np.arange(X.shape[1])[np.newaxis, :, np.newaxis], permuted_channels[:, np.newaxis, :]]
     return X_transformed
 
+def intra_sensor_channel_shuffle_transform_vectorized(X: np.ndarray) -> np.ndarray:
+    """
+    Shuffling the different channels within each sensor
+
+    Example: 
+        Original: [Ax,Ay,Az,Gx,Gy,Gz,Mx,My,Mz]
+        Possible permutations:
+        [Ax,Az,Ay,Gx,Gz,Gy,Mx,Mz,My]
+        [Ay,Az,Ax,Gy,Gz,Gx,My,Mz,Mx]
+        [Az,Ax,Ay,Gz,Gx,Gy,Mz,Mx,My]
+        [Ay,Ax,Az,Gy,Gx,Gz,My,Mx,Mz]
+        [Az,Ay,Ax,Gz,Gy,Gx,Mz,My,Mx]
+
+    Note: it might consume a lot of memory if the number of channels is high
+    """
+    if X.shape[2] % 3 != 0:
+        print("Warning: The number of channels is not a multiple of 3. There could be some channel missing.")
+    all_channel_permutations = np.array(list(itertools.permutations(range(0,3)))[1:])
+    full_permutations = []
+    for permutation in all_channel_permutations:
+        if X.shape[2] == 9:
+            full_permutations.append(list(permutation) + [x + 3 for x in permutation] + [x + 6 for x in permutation])
+        elif X.shape[2] == 6:
+            full_permutations.append(list(permutation) + [x + 3 for x in permutation])
+        elif X.shape[2] == 3:
+            full_permutations.append(list(permutation))
+
+    # Apply a single random permutation to all samples
+    random_permutation_idx = np.random.randint(len(full_permutations))
+    print("Using permutation:", full_permutations[random_permutation_idx])
+    random_permutation = full_permutations[random_permutation_idx]
+    X_transformed = X[:, :, random_permutation]
+
+    return np.array(X_transformed)
+
 def time_segment_permutation_transform_improved(X, num_segments=4):
     """
     Randomly scrambling sections of the signal

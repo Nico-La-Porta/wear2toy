@@ -323,8 +323,6 @@ def configure_model_for_tuning(model, tuning_strategy, num_classes):
 
 
 
-
-
 def balance_holdout_classes(X_train, Y_train, X_test, Y_test, 
                           all_window_indices_train, all_window_indices_test,
                           all_consecutivity_train, all_consecutivity_test,
@@ -451,7 +449,6 @@ def balance_holdout_classes(X_train, Y_train, X_test, Y_test,
     return (X_train_updated, Y_train_updated, X_test_updated, Y_test_updated,
             indices_train_updated, indices_test_updated, 
             consec_train_updated, consec_test_updated)
-
 
 def sanity_check_window_alignment(
     Y,
@@ -1031,7 +1028,7 @@ def main(args):
                 logger.info("Applicazione data augmentation al set di training del fold.")
                 transformation_function = generate_composite_transform_function_simple([
                     noise_transform_vectorized, scaling_transform_vectorized, negate_transform_vectorized,
-                    time_flip_transform_vectorized, channel_shuffle_transform_vectorized,
+                    time_flip_transform_vectorized, intra_sensor_channel_shuffle_transform_vectorized,
                     time_warp_transform_improved, time_warp_transform_low_cost
                 ])
                 X_train_aug = transformation_function(X_train_fold)
@@ -1297,7 +1294,7 @@ def main(args):
                 logger.info("Applicazione data augmentation al set di training del fold.")
                 transformation_function = generate_composite_transform_function_simple([
                     noise_transform_vectorized, scaling_transform_vectorized, negate_transform_vectorized,
-                    time_flip_transform_vectorized, channel_shuffle_transform_vectorized,
+                    time_flip_transform_vectorized, intra_sensor_channel_shuffle_transform_vectorized,
                     time_warp_transform_improved, time_warp_transform_low_cost
                 ])
                 X_train_aug = transformation_function(X_train_fold)
@@ -1509,7 +1506,6 @@ def main(args):
         )
 
 
-    
 if __name__ == "__main__":
     args = parse_args()
     main(args)

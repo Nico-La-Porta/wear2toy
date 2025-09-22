@@ -66,7 +66,7 @@ transform_funcs = [
     #axis_angle_to_rotation_matrix_3d_vectorized,
     negate_transform_vectorized,
     time_flip_transform_vectorized,
-    channel_shuffle_transform_vectorized,
+    intra_sensor_channel_shuffle_transform_vectorized,
     #time_segment_permutation_transform_improved,
     #get_cubic_spline_interpolation,
     time_warp_transform_improved,

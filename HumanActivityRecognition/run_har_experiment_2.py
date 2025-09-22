@@ -17,6 +17,7 @@
 
 
 from email import parser
+import json
 import os
 import sys
 import argparse
@@ -221,14 +222,14 @@ def parse_args():
                         help='SUPSI ADOS Dataset da usare per il fine-tuning.')
 
     # Argomenti per il Pre-Training (PT)
-    parser.add_argument('--pt-norm', type=str, default='none', choices=['none', 'meanstd'],
+    parser.add_argument('--pt-norm', type=str, default='none', choices=['none', 'meanstd', 'iqr'],
                         help='Normalizzazione usata durante il pre-training per selezionare il modello corretto.')
     parser.add_argument('--pt-aug', type=str, default='none', choices=['none', 'alltrs'],
                         help='Data augmentation usata durante il pre-training per selezionare il modello corretto.')
 
     # Argomenti per il Fine-Tuning (FT)
-    parser.add_argument('--ft-norm', type=str, default='none', choices=['none', 'meanstdonpt', 'meanstdonft'],
-                        help='Metodo di normalizzazione per il fine-tuning. "meanstdonpt" usa le statistiche del pre-training, "meanstdonft" calcola nuove statistiche.')
+    parser.add_argument('--ft-norm', type=str, default='none', choices=['none', 'meanstd', 'iqr'],
+                        help='Metodo di normalizzazione per il fine-tuning. "meanstdonpt" usa le statistiche del pre-training.')
     parser.add_argument('--ft-aug', type=str, default='none', choices=['none', 'alltrs'],
                         help='Data augmentation da applicare durante il fine-tuning.')
     
@@ -255,16 +256,21 @@ def get_pretrained_model_path(pt_norm, pt_aug):
     """
     Restituisce il path del modello pre-addestrato corretto in base alla configurazione.
     """
+    #base_path = PRETRAINED_MODELS_DIR
     base_path = r'C:\codes\HumanActivityRecognition\models'
     
     if pt_norm == 'meanstd' and pt_aug == 'alltrs':
-        return os.path.join(base_path, 'best_model_dl_norm_mean_std_and_aug.pkl')
+        return os.path.join(base_path, 'best_model_dl_meanstd_aug_sampler.pkl')
+    elif pt_norm == 'iqr' and pt_aug == 'alltrs':
+        return os.path.join(base_path, 'best_model_dl_iqr_aug.pkl')
     elif pt_norm == 'meanstd' and pt_aug == 'none':
-        return os.path.join(base_path, 'best_model_dl_norm_mean_std_without_sampler.pkl')
+        return os.path.join(base_path, 'best_model_dl_meanstd.pkl')
+    elif pt_norm == 'iqr' and pt_aug == 'none':
+        return os.path.join(base_path, 'best_model_dl_iqr_sampler.pkl')
     elif pt_norm == 'none' and pt_aug == 'alltrs':
-        return os.path.join(base_path, 'best_model_dl_with_aug.pkl')
+        return os.path.join(base_path, 'best_model_dl_aug_sampler.pkl')
     elif pt_norm == 'none' and pt_aug == 'none':
-        return os.path.join(base_path, 'best_model_dl_without_anything.pkl')
+        return os.path.join(base_path, 'best_model_dl.pkl')
     else:
         raise ValueError(f"Combinazione di pre-training non valida: pt-norm='{pt_norm}', pt-aug='{pt_aug}'")
 
@@ -323,170 +329,96 @@ def configure_model_for_tuning(model, tuning_strategy, num_classes):
 
 
 
-def balance_holdout_classes_npz(X_train_val, Y_train_val, kid_ids_train_val, action_ids_train_val,
-                               X_test_holdout, Y_test_holdout, kid_ids_test_holdout, action_ids_test_holdout,
-                               original_files_train_val, original_files_test_holdout,
-                               row_indices_start_train_val, row_indices_start_test_holdout,
-                               row_indices_end_train_val, row_indices_end_test_holdout,
-                               padding_counts_train_val, padding_counts_test_holdout,
-                               percentage_to_move=0.15, random_seed=42):
+def balance_holdout_classes_npz(
+    X_train_val, Y_train_val, kid_ids_train_val, action_ids_train_val,
+    X_test_holdout, Y_test_holdout, kid_ids_test_holdout, action_ids_test_holdout,
+    original_files_train_val, original_files_test_holdout,
+    row_indices_start_train_val, row_indices_start_test_holdout,
+    row_indices_end_train_val, row_indices_end_test_holdout,
+    padding_counts_train_val, padding_counts_test_holdout,
+    percentage_to_move=0.15, random_seed=42
+):
     """
-    Bilancia le classi nel test holdout spostando finestre dal train/val set
-    quando alcune classi sono mancanti nel test set (workflow NPZ).
-    
-    Args:
-        X_train_val, Y_train_val: Dati di train/validation mappati
-        kid_ids_train_val, action_ids_train_val: Metadati train/val
-        X_test_holdout, Y_test_holdout: Dati di test holdout mappati
-        kid_ids_test_holdout, action_ids_test_holdout: Metadati test holdout
-        original_files_*, row_indices_*, padding_counts_*: Altri metadati NPZ
-        percentage_to_move: Percentuale di finestre da spostare per classe mancante
-        random_seed: Seed per riproducibilità
-    
-    Returns:
-        tuple: Dati e metadati aggiornati per train_val e test_holdout
+    Bilancia le classi nel test holdout spostando finestre dal train/val set.
+    Lavora SOLO con etichette originali, non mappate.
     """
-    logger.info("=== INIZIO BILANCIAMENTO CLASSI HOLDOUT NPZ ===")
-    
-    # Conta distribuzione classi
-    train_class_distribution = Counter(Y_train_val)
-    test_class_distribution = Counter(Y_test_holdout)
-    
-    # Trova classi mancanti nel test
-    all_classes = set(Y_train_val)
-    missing_classes = [cls for cls in all_classes if cls not in test_class_distribution]
-    
-    logger.info(f"Classi totali nel training: {sorted(all_classes)}")
-    logger.info(f"Classi presenti nel test: {sorted(test_class_distribution.keys())}")
-    logger.info(f"Classi mancanti nel test: {missing_classes}")
-    
-    if not missing_classes:
-        logger.info("Tutte le classi sono già presenti nel test. Nessun bilanciamento necessario.")
-        return (X_train_val, Y_train_val, kid_ids_train_val, action_ids_train_val,
-                original_files_train_val, row_indices_start_train_val, row_indices_end_train_val, 
-                padding_counts_train_val,
-                X_test_holdout, Y_test_holdout, kid_ids_test_holdout, action_ids_test_holdout,
-                original_files_test_holdout, row_indices_start_test_holdout, row_indices_end_test_holdout,
-                padding_counts_test_holdout)
-    
-    # Calcola finestre da spostare per ogni classe mancante
-    windows_to_move = {}
-    for missing_class in missing_classes:
-        total_windows = train_class_distribution[missing_class]
-        windows_to_move[missing_class] = max(1, int(total_windows * percentage_to_move))
-        logger.info(f"Classe {missing_class}: {total_windows} finestre totali -> "
-                   f"{windows_to_move[missing_class]} finestre da spostare")
-    
-    # Seleziona indici da spostare
+    logger.info("=== INIZIO BILANCIAMENTO CLASSI HOLDOUT NPZ (etichette originali) ===")
+
     np.random.seed(random_seed)
+
+    train_classes = set(Y_train_val)
+    test_classes = set(Y_test_holdout)
+    missing_classes = train_classes - test_classes
+
+    logger.info(f"Classi training: {sorted(train_classes)}")
+    logger.info(f"Classi test: {sorted(test_classes)}")
+    logger.info(f"Classi mancanti nel test: {missing_classes}")
+
     indices_to_move = []
-    
-    for missing_class in missing_classes:
-        # Trova tutti gli indici delle finestre di questa classe nel training
-        class_indices = np.where(Y_train_val == missing_class)[0]
-        
-        # Seleziona casualmente le finestre da spostare
-        n_to_move = windows_to_move[missing_class]
-        if n_to_move > 0 and len(class_indices) >= n_to_move:
-            selected_indices = np.random.choice(class_indices, size=n_to_move, replace=False)
-            indices_to_move.extend(selected_indices)
-            logger.info(f"Selezionate {len(selected_indices)} finestre per classe {missing_class}")
-        elif len(class_indices) < n_to_move:
-            logger.warning(f"Classe {missing_class}: richieste {n_to_move} finestre ma disponibili solo {len(class_indices)}")
-            indices_to_move.extend(class_indices)  # Sposta tutte le finestre disponibili
-    
-    indices_to_move = np.array(indices_to_move, dtype=int)
-    logger.info(f"Totale finestre da spostare: {len(indices_to_move)}")
-    
-    if len(indices_to_move) == 0:
+    for cls in missing_classes:
+        class_indices = np.where(Y_train_val == cls)[0]
+        n_to_move = max(1, int(len(class_indices) * percentage_to_move))
+        n_to_move = min(n_to_move, len(class_indices))  # non più di quello che c'è
+        if n_to_move > 0:
+            selected = np.random.choice(class_indices, n_to_move, replace=False)
+            indices_to_move.extend(selected)
+
+    if not indices_to_move:
         logger.info("Nessuna finestra da spostare.")
         return (X_train_val, Y_train_val, kid_ids_train_val, action_ids_train_val,
-                original_files_train_val, row_indices_start_train_val, row_indices_end_train_val, 
-                padding_counts_train_val,
+                original_files_train_val, row_indices_start_train_val, row_indices_end_train_val, padding_counts_train_val,
                 X_test_holdout, Y_test_holdout, kid_ids_test_holdout, action_ids_test_holdout,
-                original_files_test_holdout, row_indices_start_test_holdout, row_indices_end_test_holdout,
-                padding_counts_test_holdout)
-    
-    # ===== ESTRAI FINESTRE DA SPOSTARE =====
-    X_to_move = X_train_val[indices_to_move]
-    Y_to_move = Y_train_val[indices_to_move]
-    kid_ids_to_move = kid_ids_train_val[indices_to_move]
-    action_ids_to_move = action_ids_train_val[indices_to_move]
-    original_files_to_move = original_files_train_val[indices_to_move]
-    row_start_to_move = row_indices_start_train_val[indices_to_move]
-    row_end_to_move = row_indices_end_train_val[indices_to_move]
-    padding_to_move = padding_counts_train_val[indices_to_move]
-    
-    # ===== CREA MASCHERA PER FINESTRE DA MANTENERE NEL TRAINING =====
-    mask_keep = np.ones(len(X_train_val), dtype=bool)
-    mask_keep[indices_to_move] = False
-    
-    # ===== AGGIORNA TRAINING SET (rimuove finestre spostate) =====
-    X_train_updated = X_train_val[mask_keep]
-    Y_train_updated = Y_train_val[mask_keep]
-    kid_ids_train_updated = kid_ids_train_val[mask_keep]
-    action_ids_train_updated = action_ids_train_val[mask_keep]
-    original_files_train_updated = original_files_train_val[mask_keep]
-    row_start_train_updated = row_indices_start_train_val[mask_keep]
-    row_end_train_updated = row_indices_end_train_val[mask_keep]
-    padding_train_updated = padding_counts_train_val[mask_keep]
-    
-    # ===== AGGIORNA TEST SET (aggiunge finestre spostate) =====
-    X_test_updated = np.concatenate([X_test_holdout, X_to_move], axis=0)
-    Y_test_updated = np.concatenate([Y_test_holdout, Y_to_move], axis=0)
-    kid_ids_test_updated = np.concatenate([kid_ids_test_holdout, kid_ids_to_move], axis=0)
-    action_ids_test_updated = np.concatenate([action_ids_test_holdout, action_ids_to_move], axis=0)
-    original_files_test_updated = np.concatenate([original_files_test_holdout, original_files_to_move], axis=0)
-    row_start_test_updated = np.concatenate([row_indices_start_test_holdout, row_start_to_move], axis=0)
-    row_end_test_updated = np.concatenate([row_indices_end_test_holdout, row_end_to_move], axis=0)
-    padding_test_updated = np.concatenate([padding_counts_test_holdout, padding_to_move], axis=0)
-    
-    # ===== LOG RISULTATI FINALI =====
-    logger.info("=== RISULTATI BILANCIAMENTO NPZ ===")
-    logger.info(f"Training set: {X_train_val.shape} -> {X_train_updated.shape}")
-    logger.info(f"Test set: {X_test_holdout.shape} -> {X_test_updated.shape}")
-    
-    # Verifica nuova distribuzione
-    updated_train_distribution = Counter(Y_train_updated)
-    updated_test_distribution = Counter(Y_test_updated)
-    
-    logger.info("Nuova distribuzione training:")
-    for class_label in sorted(updated_train_distribution.keys()):
-        logger.info(f"   Classe {class_label}: {updated_train_distribution[class_label]} finestre")
-    
-    logger.info("Nuova distribuzione test:")
-    for class_label in sorted(updated_test_distribution.keys()):
-        logger.info(f"   Classe {class_label}: {updated_test_distribution[class_label]} finestre")
-    
-    # Verifica finale
-    still_missing = [cls for cls in all_classes if cls not in updated_test_distribution]
-    if still_missing:
-        logger.warning(f"Classi ancora mancanti nel test: {still_missing}")
-    else:
-        logger.info("✓ Tutte le classi ora presenti nel test set.")
-    
-    # ===== DEBUG COERENZA METADATI =====
-    logger.info("=== VERIFICA COERENZA METADATI ===")
-    logger.info(f"X_train shape: {X_train_updated.shape}")
-    logger.info(f"kid_ids_train length: {len(kid_ids_train_updated)}")
-    logger.info(f"action_ids_train length: {len(action_ids_train_updated)}")
-    logger.info(f"X_test shape: {X_test_updated.shape}")
-    logger.info(f"kid_ids_test length: {len(kid_ids_test_updated)}")
-    logger.info(f"action_ids_test length: {len(action_ids_test_updated)}")
-    
-    # Verifica che tutte le lunghezze siano coerenti
-    assert len(X_train_updated) == len(Y_train_updated) == len(kid_ids_train_updated), "Lunghezze training inconsistenti"
-    assert len(X_test_updated) == len(Y_test_updated) == len(kid_ids_test_updated), "Lunghezze test inconsistenti"
-    
-    logger.info("✓ Verifica coerenza metadati: OK")
-    
-    return (X_train_updated, Y_train_updated, kid_ids_train_updated, action_ids_train_updated,
-            original_files_train_updated, row_start_train_updated, row_end_train_updated, 
-            padding_train_updated,
-            X_test_updated, Y_test_updated, kid_ids_test_updated, action_ids_test_updated,
-            original_files_test_updated, row_start_test_updated, row_end_test_updated,
-            padding_test_updated)
+                original_files_test_holdout, row_indices_start_test_holdout, row_indices_end_test_holdout, padding_counts_test_holdout)
 
+    indices_to_move = np.array(indices_to_move)
+
+    # Estraggo dal train
+    X_move = X_train_val[indices_to_move]
+    Y_move = Y_train_val[indices_to_move]
+    kid_move = kid_ids_train_val[indices_to_move]
+    act_move = action_ids_train_val[indices_to_move]
+    files_move = original_files_train_val[indices_to_move]
+    row_start_move = row_indices_start_train_val[indices_to_move]
+    row_end_move = row_indices_end_train_val[indices_to_move]
+    pad_move = padding_counts_train_val[indices_to_move]
+
+    # Train aggiornato
+    mask = np.ones(len(X_train_val), dtype=bool)
+    mask[indices_to_move] = False
+    X_train_val = X_train_val[mask]
+    Y_train_val = Y_train_val[mask]
+    kid_ids_train_val = kid_ids_train_val[mask]
+    action_ids_train_val = action_ids_train_val[mask]
+    original_files_train_val = original_files_train_val[mask]
+    row_indices_start_train_val = row_indices_start_train_val[mask]
+    row_indices_end_train_val = row_indices_end_train_val[mask]
+    padding_counts_train_val = padding_counts_train_val[mask]
+
+    # Test aggiornato
+    X_test_holdout = np.concatenate([X_test_holdout, X_move])
+    Y_test_holdout = np.concatenate([Y_test_holdout, Y_move])
+    kid_ids_test_holdout = np.concatenate([kid_ids_test_holdout, kid_move])
+    action_ids_test_holdout = np.concatenate([action_ids_test_holdout, act_move])
+    original_files_test_holdout = np.concatenate([original_files_test_holdout, files_move])
+    row_indices_start_test_holdout = np.concatenate([row_indices_start_test_holdout, row_start_move])
+    row_indices_end_test_holdout = np.concatenate([row_indices_end_test_holdout, row_end_move])
+    padding_counts_test_holdout = np.concatenate([padding_counts_test_holdout, pad_move])
+
+    logger.info("=== DISTRIBUZIONE FINALE ===")
+    logger.info(f"Train classi: {Counter(Y_train_val)}")
+    logger.info(f"Test classi: {Counter(Y_test_holdout)}")
+
+    # 🔒 Controllo forte
+    missing_after = train_classes - set(Y_test_holdout)
+    if missing_after:
+        logger.error(f"Ancora classi mancanti nel test: {missing_after}")
+        raise RuntimeError("Bilanciamento non riuscito!")
+
+    logger.info("✓ Tutte le classi ora presenti nel test set.")
+    return (X_train_val, Y_train_val, kid_ids_train_val, action_ids_train_val,
+            original_files_train_val, row_indices_start_train_val, row_indices_end_train_val, padding_counts_train_val,
+            X_test_holdout, Y_test_holdout, kid_ids_test_holdout, action_ids_test_holdout,
+            original_files_test_holdout, row_indices_start_test_holdout, row_indices_end_test_holdout, padding_counts_test_holdout)
 
         
 def main(args):
@@ -495,6 +427,7 @@ def main(args):
     """
 
     data_path = "C:\\codes\\HumanActivityRecognition\\data\\downstream_data"
+    #data_path = DOWNSTREAM_DATA_DIR
 
 
 
@@ -638,30 +571,20 @@ def main(args):
 
     # ===== 6. CALCOLO STATISTICHE DI NORMALIZZAZIONE =====
     mean, std = None, None
+    median, iqr = None, None
     
-    if args.ft_norm == 'meanstdonpt':
-        logger.info("Caricamento statistiche del pre-training per normalizzazione...")
-        mean_df = pd.read_csv(os.path.join(REPORTS_DIR, 'mean_trs.csv'))
-        std_df = pd.read_csv(os.path.join(REPORTS_DIR, 'std_trs.csv'))
+    if args.ft_norm == 'meanstd':
+        logger.info("Normalizzazione con statistiche del pre-training (MEAN).")
+        mean_df, std_df = pd.read_csv(os.path.join(REPORTS_DIR, 'mean_trs.csv')), pd.read_csv(os.path.join(REPORTS_DIR, 'std_trs.csv'))
         mean, std = mean_df['mean'].values[1:-1], std_df['std'].values[1:-1]
         logger.info("Parametri di normalizzazione caricati dal pre-training")
         logger.debug(f"Mean shape: {mean.shape}, Std shape: {std.shape}")
-        
-    elif args.ft_norm == 'meanstdonft':
-        logger.info("Calcolo statistiche di normalizzazione sul dataset di fine-tuning...")
-        
-        # Filtra solo i bambini di training per calcolare le statistiche
-        if args.holdout_kids:
-            df_train_for_stats = df_toy[~df_toy['kid_id'].isin(args.holdout_kids)]
-            logger.info(f"Calcolo statistiche solo sui bambini di training (escludendo holdout: {args.holdout_kids})")
-        else:
-            df_train_for_stats = df_toy
-            logger.info("Calcolo statistiche su tutto il dataset")
-            
-        mean, std = normalization.compute_dataframe_mean_std(df_train_for_stats)
-        logger.info(f"Statistiche calcolate - Mean: {mean[:3]}..., Std: {std[:3]}...")
-    else:
-        logger.info("Nessuna normalizzazione applicata al fine-tuning")
+    elif args.ft_norm == 'iqr':
+        logger.info("Normalizzazione con statistiche del pre-training (IQR).")
+        median_df, iqr_df = pd.read_csv(os.path.join(REPORTS_DIR, 'median_trs.csv')), pd.read_csv(os.path.join(REPORTS_DIR, 'iqr_trs.csv'))
+        median, iqr = median_df['median'].values[1:-1], iqr_df['iqr'].values[1:-1]
+        logger.info("Parametri di normalizzazione caricati dal pre-training")
+        logger.debug(f"Mean shape: {median.shape}, Std shape: {iqr.shape}")
     
 
     # ===== 7. APPLICAZIONE NORMALIZZAZIONE ALLE FINESTRE =====
@@ -677,6 +600,19 @@ def main(args):
         X = X_normalized.reshape(original_shape)  # Ripristina forma originale
         
         logger.info(f"Normalizzazione applicata a tutte le finestre")
+        logger.info(f"Shape dopo normalizzazione: {X.shape}")
+    elif median is not None and iqr is not None:
+        logger.info("Applicazione normalizzazione IQR alle finestre pre-processate...")
+        
+        # Normalizza tutte le finestre
+        original_shape = X.shape
+        X_reshaped = X.reshape(-1, X.shape[-1])  # (n_windows * timesteps, n_features)
+        
+        # Applica normalizzazione IQR
+        X_normalized = (X_reshaped - median) / iqr
+        X = X_normalized.reshape(original_shape)  # Ripristina forma originale
+        
+        logger.info(f"Normalizzazione IQR applicata a tutte le finestre")
         logger.info(f"Shape dopo normalizzazione: {X.shape}")
     else:
         logger.info("Nessuna normalizzazione applicata alle finestre")
@@ -715,6 +651,33 @@ def main(args):
         logger.info(f"Bambini in training: {sorted(np.unique(kid_ids_train_val))}")
         logger.info(f"Bambini in test: {sorted(np.unique(kid_ids_test_holdout))}")
 
+
+        
+        # ===== 10. VERIFICA NECESSITÀ BILANCIAMENTO =====
+        train_actions_set = set(Y_train_val)
+        test_actions_set = set(Y_test_holdout)
+        missing_in_test = train_actions_set - test_actions_set
+
+        if missing_in_test:
+            (X_train_val, Y_train_val, kid_ids_train_val, action_ids_train_val,
+            original_files_train_val, row_start_train_val, row_end_train_val, padding_train_val,
+            X_test_holdout, Y_test_holdout, kid_ids_test_holdout, action_ids_test_holdout,
+            original_files_test_holdout, row_start_test_holdout, row_end_test_holdout,
+            padding_test_holdout) = balance_holdout_classes_npz(
+                X_train_val, Y_train_val, kid_ids_train_val, action_ids_train_val,
+                X_test_holdout, Y_test_holdout, kid_ids_test_holdout, action_ids_test_holdout,
+                original_files_train_val, original_files_test_holdout,
+                row_start_train_val, row_start_test_holdout,
+                row_end_train_val, row_end_test_holdout,
+                padding_train_val, padding_test_holdout,
+                percentage_to_move=0.15, random_seed=seed_used
+            )
+
+            
+            logger.info("Bilanciamento applicato con successo!")
+        else:
+            logger.info("Nessun bilanciamento necessario: tutte le classi presenti nel test")
+
         # ===== 9. MAPPATURA AZIONI =====
         logger.info("Mappatura delle azioni per la classificazione...")
         
@@ -722,44 +685,15 @@ def main(args):
         unique_labels = np.unique(Y_train_val)
         label_mapping = {label: i for i, label in enumerate(unique_labels)}
         Y_train_val_mapped = np.array([label_mapping[y] for y in Y_train_val])
-        
-        # Mappa anche le etichette del test holdout
         Y_test_holdout_mapped = np.array([label_mapping[y] for y in Y_test_holdout])
         num_classes = len(unique_labels)
+
         
         logger.info(f"Azioni originali: {sorted(unique_labels)}")
         logger.info(f"Mappatura azioni: {label_mapping}")
         logger.info(f"Numero classi finali: {num_classes}")
-        
-        # ===== 10. VERIFICA NECESSITÀ BILANCIAMENTO =====
-        train_actions_set = set(Y_train_val_mapped)
-        test_actions_set = set(Y_test_holdout_mapped)
-        missing_in_test = train_actions_set - test_actions_set
 
-        if missing_in_test:
-            logger.info(f"Applicazione bilanciamento per classi mancanti nel test: {missing_in_test}")
-            
-            # ===== APPLICA BILANCIAMENTO NPZ =====
-            (X_train_val, Y_train_val_mapped, kid_ids_train_val, action_ids_train_val,
-             original_files_train_val, row_start_train_val, row_end_train_val, padding_train_val,
-             X_test_holdout, Y_test_holdout_mapped, kid_ids_test_holdout, action_ids_test_holdout,
-             original_files_test_holdout, row_start_test_holdout, row_end_test_holdout, 
-             padding_test_holdout) = balance_holdout_classes_npz(
-                X_train_val, Y_train_val_mapped, kid_ids_train_val, action_ids_train_val,
-                X_test_holdout, Y_test_holdout_mapped, kid_ids_test_holdout, action_ids_test_holdout,
-                original_files_train_val, original_files_test_holdout,
-                row_start_train_val, row_start_test_holdout,
-                row_end_train_val, row_end_test_holdout,
-                padding_train_val, padding_test_holdout,
-                percentage_to_move=0.15, random_seed=seed_used
-            )
-            
-            logger.info("Bilanciamento applicato con successo!")
-        else:
-            # Nessun bilanciamento necessario, ma dobbiamo comunque usare le etichette mappate
-            Y_train_val_mapped = Y_train_val_mapped  # già calcolato sopra
-            logger.info("Nessun bilanciamento necessario: tutte le classi presenti nel test")
-        
+
         # ===== 11. RICOSTRUISCI METADATI PER COMPATIBILITÀ =====
         # Crea metadati nel formato atteso dal resto del codice
         all_window_indices = []
@@ -844,6 +778,8 @@ def main(args):
     )
     # Converte i pesi in un tensore PyTorch, pronto per essere usato dalla loss.
     class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32)
+    if torch.cuda.is_available():
+        class_weights_tensor = class_weights_tensor.to('cuda')
     
     logger.info(f"Pesi delle classi calcolati: {dict(zip(np.unique(Y_mapped), class_weights))}")
 
@@ -939,7 +875,7 @@ def main(args):
                 logger.info("Applicazione data augmentation al set di training del fold.")
                 transformation_function = generate_composite_transform_function_simple([
                     noise_transform_vectorized, scaling_transform_vectorized, negate_transform_vectorized,
-                    time_flip_transform_vectorized, channel_shuffle_transform_vectorized,
+                    time_flip_transform_vectorized, intra_sensor_channel_shuffle_transform_vectorized,
                     time_warp_transform_improved, time_warp_transform_low_cost
                 ])
                 X_train_aug = transformation_function(X_train_fold)
@@ -1083,6 +1019,10 @@ def main(args):
         best_fold = max(all_fold_scores, key=lambda x: x['val_f1'])
         best_hyperparameters = best_fold['params']
         logger.info(f"Migliori iperparametri trovati (dal Fold {best_fold['fold']}): {best_hyperparameters}")
+        # Salva i risultati dei fold in un JSON file
+        fold_results_path = os.path.join(exp_reports_dir, "best_hyperparameters.json")
+        with open(fold_results_path, 'w') as f:
+            json.dump(fold_results, f, indent=4)
 
         logger.info("Addestramento del modello finale su tutto il set di train/validazione...")
         full_train_val_dataset = HARDataset(X, Y_mapped, all_window_indices, all_consecutivity)
@@ -1213,7 +1153,7 @@ def main(args):
                 logger.info("Applicazione data augmentation al set di training del fold.")
                 transformation_function = generate_composite_transform_function_simple([
                     noise_transform_vectorized, scaling_transform_vectorized, negate_transform_vectorized,
-                    time_flip_transform_vectorized, channel_shuffle_transform_vectorized,
+                    time_flip_transform_vectorized, intra_sensor_channel_shuffle_transform_vectorized,
                     time_warp_transform_improved, time_warp_transform_low_cost
                 ])
                 X_train_aug = transformation_function(X_train_fold)
@@ -1295,6 +1235,9 @@ def main(args):
             best_trial = study.best_trial
             best_state = best_trial.user_attrs["best_state"]
             logger.info(f"Migliori iperparametri per il fold {fold + 1}: {best_params_fold} (Val F1: {best_f1_fold:.4f})")
+            # Salva i migliori iperparametri in un JSON file
+            with open(os.path.join(exp_reports_dir, f"best_hyperparameters_fold_{fold + 1}.json"), 'w') as f:
+                json.dump(best_params_fold, f, indent=4)
 
             model_final_fold = DeepConvLSTM()
             model_final_fold.load_state_dict(torch.load(pretrained_model_path, map_location='cpu'), strict=False)
@@ -1373,6 +1316,10 @@ def main(args):
         best_fold = max(all_fold_scores, key=lambda x: x['val_f1'])
         best_hyperparameters = best_fold['params']
         logger.info(f"Migliori iperparametri globali scelti (dal Fold {best_fold['fold']}): {best_hyperparameters}")
+        # Salva i risultati dei fold in un JSON file
+        fold_results_path = os.path.join(exp_reports_dir, "best_hyperparameters.json")
+        with open(fold_results_path, 'w') as f:
+            json.dump(fold_results, f, indent=4)
 
         # 2.3 Addestra un modello finale su TUTTI i dati (X e Y)
         logger.info("Addestramento del modello finale su tutti i dati disponibili...")
