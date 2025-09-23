@@ -187,8 +187,6 @@ def plot_CM(mdl_class, mdl_weights: str, X: np.ndarray, Y: np.ndarray, batch_siz
 
 
 
-
-
 def combine_kfold_confusion_matrices(fold_results_dir, num_folds=3, toy_name="ball", save_path=None, class_names=None):
     """
     Combina le confusion matrix di tutti i fold in una singola CM finale

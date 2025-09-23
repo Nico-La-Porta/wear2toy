@@ -138,9 +138,6 @@ def compute_dataframe_median_iqr(df: 'pd.DataFrame') -> Tuple[np.ndarray, np.nda
 
 
 
-
-
-
 def normalize_each_recording_med_iqr(dataset_labeled: List[Dict[str, Any]], medians: np.ndarray, iqr: np.ndarray) -> List[Dict[str, Any]]:
     normalized_dataset = []
 
