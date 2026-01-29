@@ -1,8 +1,0 @@
-global_window_id,true_label,predicted_label,is_consecutive,correct,true_action,predicted_action
-3,0,2,1,False,throw,stack
-8,1,2,1,False,grab,stack
-12,2,2,1,True,stack,stack
-14,2,2,1,True,stack,stack
-16,2,2,1,True,stack,stack
-22,2,1,1,False,stack,grab
-25,3,2,1,False,move,stack
