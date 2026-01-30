@@ -14,7 +14,7 @@ from sklearn.utils.class_weight import compute_class_weight
 import optuna
 from optuna.pruners import MedianPruner
 
-from src.app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
+from src.app_config import DOWNSTREAM_DATA_DIR, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn
 
 from src.utils import train_with_cm, mapping_activity
@@ -70,10 +70,7 @@ def main(args):
     Funzione principale che esegue l'esperimento.
     """
 
-    data_path = "C:\\codes\\HumanActivityRecognition\\data\\downstream_data"
-    #data_path = DOWNSTREAM_DATA_DIR
-
-
+    data_path = DOWNSTREAM_DATA_DIR
 
     # ===== Ricava il seed dal pickle =====
     target_actions = None

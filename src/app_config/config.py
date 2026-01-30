@@ -5,23 +5,15 @@ from pathlib import Path
 # Set a default environment if none is provided
 APP_ENV = os.getenv('APP_ENV')
 
-if APP_ENV == 'hpc_supsi':
-    from .config_hpc_supsi import *
-elif APP_ENV == 'testing':
-    from .config_test import *
+if ".env" in os.listdir(Path(__file__).resolve().parent):
+    dotenv.load_dotenv()
 elif APP_ENV == 'dev':
     from .config_dev import *
 else:
-    dotenv.load_dotenv()
-
-    # Configuration - Load from environment variables
-    NEPTUNE_PROJECT = os.getenv("NEPTUNE_PROJECT")
-    NEPTUNE_API_TOKEN = os.getenv("NEPTUNE_API_TOKEN")
-
-    # Paths
     PROJ_ROOT = Path(__file__).resolve().parents[2]
 
     DATA_DIR = PROJ_ROOT / "data"
+    DOWNSTREAM_DATA_DIR = DATA_DIR / "downstream_data" #cartella per i dati scaricati da fonti esterne
     RAW_DATA_DIR = DATA_DIR / "raw" #in formato .csv
     RAW_DATA_DIR_TRAIN = RAW_DATA_DIR/"train" #in formato .csv
     RAW_DATA_DIR_TEST=RAW_DATA_DIR/"test"  #in formato .csv

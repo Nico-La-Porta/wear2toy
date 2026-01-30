@@ -15,7 +15,7 @@ from sklearn.utils.class_weight import compute_class_weight
 import optuna
 from optuna.pruners import MedianPruner
 
-from src.app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
+from src.app_config import DOWNSTREAM_DATA_DIR, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn
 from src.utils import mapping_activity, normalization, train_with_cm
 from src.utils.log_config import setup_logging, logger
@@ -305,7 +305,7 @@ def run_single_experiment(args, seed_used, target_actions, ft_norm, ft_aug, tuni
     logger.info(f"Cartelle: {exp_root_models}, {exp_root_figures}, {exp_root_reports}")
 
     # ===== CARICA DATI ORIGINALI PER CALCOLO STATISTICHE =====
-    data_path = "C:\\codes\\HumanActivityRecognition\\data\\downstream_data"
+    data_path = DOWNSTREAM_DATA_DIR
     logger.info("Caricamento dati originali per calcolo statistiche di normalizzazione...")
     df_toy, toy_mapping = load_and_preprocess_data_unified(
         toy_name=args.toy, 
