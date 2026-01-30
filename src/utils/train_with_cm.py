@@ -10,9 +10,9 @@ from sklearn.utils.class_weight import compute_class_weight
 import torch
 import torch.nn.functional as F
 
-from app_config import MODELS_DIR, FIGURES_DIR, REPORTS_DIR
-from utils.log_config import logger
-from utils.plot import reliability_plot
+from src.app_config import MODELS_DIR, FIGURES_DIR, REPORTS_DIR
+from src.utils.log_config import logger
+from src.utils.plot import reliability_plot
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

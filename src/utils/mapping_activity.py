@@ -1,6 +1,6 @@
 import json
 import os
-from app_config import REPORTS_DIR
+from src.app_config import REPORTS_DIR
 
 # Mapping hardcodato per la palla
 BALL_ACTION_MAPPING = {

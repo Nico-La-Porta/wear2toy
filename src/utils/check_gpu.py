@@ -1,5 +1,5 @@
 import torch
-from utils.log_config import logger
+from src.utils.log_config import logger
 #verifico se la GPU è disponibile
 def check_gpu_availability():
 

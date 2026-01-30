@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from torch.utils.data import DataLoader
 from sklearn.metrics import confusion_matrix
-from utils.log_config import logger
+from src.utils.log_config import logger
 from glob import glob
 from sklearn.metrics import classification_report
 
@@ -24,8 +24,8 @@ import matplotlib.patches as mpatches
 
 
 
-from app_config import FIGURES_DIR, REPORTS_DIR
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset
+from src.app_config import FIGURES_DIR, REPORTS_DIR
+from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset
 
 
 

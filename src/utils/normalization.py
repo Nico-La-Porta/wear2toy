@@ -2,10 +2,10 @@ import numpy as np
 import os
 from typing import Tuple,List, Dict, Any
 import sys
-from app_config import PROJ_ROOT
+from src.app_config import PROJ_ROOT
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 
-from utils.log_config import logger
+from src.utils.log_config import logger
 import pandas as pd
 
 def concatenate_recordings(dataset_labeled):

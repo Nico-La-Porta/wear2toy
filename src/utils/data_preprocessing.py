@@ -1,10 +1,10 @@
 import os
 import numpy as np
 import json
-from utils.log_config import logger
+from src.utils.log_config import logger
 from typing import List, Dict, Any
 #from scipy.stats import ks_1samp, norm
-from app_config import FIGURES_DIR
+from src.app_config import FIGURES_DIR
 #from scipy import stats
 #from sklearn.preprocessing import StandardScaler, RobustScaler
 #funzioni per:

@@ -2,13 +2,13 @@ import os
 import sys
 import numpy as np
 import torch
-from app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
+from src.app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 import pandas as pd
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 
 import argparse
-from utils import data_preprocessing
-from utils.log_config import logger
+from src.utils import data_preprocessing
+from src.utils.log_config import logger
 
 from src.run_config.run_config import SLIDING_WINDOW_LENGTH
 from src.run_config.run_config import NB_SENSOR_CHANNELS
@@ -16,11 +16,11 @@ from src.run_config.run_config import SLIDING_WINDOW_STEP
 
 import src.utils.sliding_window_on_data as sliding_window_on_data
 from torch.utils.data import DataLoader
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset
+from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset
 
 
-from utils import init_weights
-import train_with_cm
+from src.utils import init_weights, train_with_cm
+
 
 import optuna
 import optuna.visualization as vis
@@ -84,7 +84,7 @@ def main(seed: str = "42"):
             net = DeepConvLSTM()
 
             # Eseguo l'allenamento
-            best_f1_score = train_with_cm.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
+            best_f1_score = train_with_cm.train(net, train_loader, test_loader, epochs=100, lr=lr, exp_figures_dir=FIGURES_DIR, exp_reports_dir=REPORTS_DIR)
 
             # Salva modello se è il migliore finora
             is_better = False

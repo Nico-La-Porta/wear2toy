@@ -9,7 +9,7 @@ import numpy as np
 from torch.utils.data import WeightedRandomSampler
 
 
-from utils import  check_gpu 
+from src.utils import  check_gpu 
 
 import torch
 from torch.utils.data import Dataset

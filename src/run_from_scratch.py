@@ -15,15 +15,15 @@ from sklearn.utils.class_weight import compute_class_weight
 import optuna
 from optuna.pruners import MedianPruner
 
-from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn
-from utils import mapping_activity, normalization, train_with_cm
-from utils.log_config import setup_logging, logger
-from utils.focal_loss import FocalLoss, LabelSmoothingCrossEntropy, CombinedLoss
-from utils.figures import combine_kfold_confusion_matrices
-from utils.transformations import *
-from utils.transformations_utils import *
-from utils.data_loader import load_and_preprocess_data_unified, add_consecutive_segment_id
+from src.app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
+from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn
+from src.utils import mapping_activity, normalization, train_with_cm
+from src.utils.log_config import setup_logging, logger
+from src.utils.focal_loss import FocalLoss, LabelSmoothingCrossEntropy, CombinedLoss
+from src.utils.figures import combine_kfold_confusion_matrices
+from src.utils.transformations import *
+from src.utils.transformations_utils import *
+from src.utils.data_loader import load_and_preprocess_data_unified, add_consecutive_segment_id
 
 
 def create_single_distribution_bar_chart(Y, toy_name="Dataset", save_path=None, title_suffix=" ", use_class_prefix=True):

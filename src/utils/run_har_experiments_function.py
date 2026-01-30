@@ -1,41 +1,16 @@
-from email import parser
-import json
 import os
-import sys
-import argparse
-import shutil
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import glob
-import torch
-import pickle
-import random 
 import torch.nn as nn
-from torch.utils.data import DataLoader
-from sklearn.model_selection import StratifiedKFold
-from sklearn.utils.class_weight import compute_class_weight
 from collections import Counter
-from collections import defaultdict
 
+             
+from src.utils.log_config import  logger
 
-# Import da Optuna
-import optuna
-from optuna.pruners import MedianPruner
-
-# Import custom modules
-from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
-import src.utils.sliding_window_on_data as sliding_window_on_data
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn
-import train_with_cm
-import normalization
-from utils.log_config import setup_logging, logger
-from utils.focal_loss import FocalLoss, LabelSmoothingCrossEntropy, WeightedCrossEntropyLoss, CombinedLoss
-from utils.figures import combine_kfold_confusion_matrices
 from utils import mapping_activity
 from utils.transformations import *
 from utils.transformations_utils import *
-from utils.data_loader import load_and_preprocess_data_unified, add_consecutive_segment_id
+
 
 def create_single_distribution_bar_chart(Y, toy_name="Dataset", save_path=None, title_suffix=" ", use_class_prefix=True):
     """

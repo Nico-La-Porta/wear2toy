@@ -14,18 +14,17 @@ import optuna
 from optuna.pruners import MedianPruner
 from optuna.visualization import plot_optimization_history as optuna_plot_history
 
-from app_config import PROJ_ROOT, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
+from src.app_config import PROJ_ROOT, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 import matplotlib.pyplot as plt
 from collections import defaultdict
 
 
-from utils import data_processing
-from utils import init_weights
-import train_with_cm
-from utils.log_config import logger
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset
-from utils.figures import plot_CM
+from src.utils import data_processing
+from src.utils import train_with_cm
+from src.utils.log_config import logger
+from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset
+from src.utils.figures import plot_CM
 
 SEED = 42
 torch.manual_seed(SEED)

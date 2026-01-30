@@ -15,18 +15,17 @@ from optuna.pruners import MedianPruner
 from optuna.visualization import plot_optimization_history as optuna_plot_history
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..', 'HumanActivityRecognition')))
 sys.path.append(os.path.abspath('HumanActivityRecognition'))
-from app_config import PROJ_ROOT, REPORTS_DIR, FIGURES_DIR, MODELS_DIR, DATA_DIR
+from src.app_config import PROJ_ROOT, REPORTS_DIR, FIGURES_DIR, MODELS_DIR, DATA_DIR
 
 
 import matplotlib.pyplot as plt
 from collections import defaultdict
 
 
-from utils import data_processing
-from utils import init_weights
-import train_with_cm
-from utils.log_config import logger
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset, create_weighted_sampler
+from src.utils import data_processing
+from src.utils import init_weights, train_with_cm
+from src.utils.log_config import logger
+from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset, create_weighted_sampler
 from src.pretraining.figures import plot_CM
 
 SEED = 42
@@ -37,7 +36,7 @@ OUTPUT_WISDIM_DATA_DIR = os.path.join(DATA_DIR, 'WISDM_100Hz')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 TRAIN_JSON_DIR = os.path.join(OUTPUT_WISDIM_DATA_DIR,  'json_export_train')
 TEST_JSON_DIR  = os.path.join(OUTPUT_WISDIM_DATA_DIR,  'json_export_test')
-
+SELECTED_ACTIVITIES = ['A', 'B', 'C', 'D', 'E']  
 BEST_MODEL_PATH = os.path.join(MODELS_DIR, f"best_deepconvlstm_wisdm_medianiqr_sampler_seed_{SEED}.pt")
 BEST_SCORE_PATH = os.path.join(MODELS_DIR, f"best_deepconvlstm_wisdm_medianiqr_sampler_seed_{SEED}.score.txt")
 

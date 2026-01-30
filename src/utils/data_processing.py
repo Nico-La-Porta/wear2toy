@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.lib.stride_tricks import as_strided as ast
-from utils.log_config import logger
+from src.utils.log_config import logger
 
 
 def norm_shape(shape):

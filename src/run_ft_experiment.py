@@ -14,17 +14,17 @@ from sklearn.utils.class_weight import compute_class_weight
 import optuna
 from optuna.pruners import MedianPruner
 
-from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn
+from src.app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
+from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn
 
-from utils import train_with_cm, mapping_activity
-from utils.log_config import setup_logging, logger
-from utils.focal_loss import FocalLoss, LabelSmoothingCrossEntropy, CombinedLoss
-from utils.figures import combine_kfold_confusion_matrices
-from utils.transformations import *
-from utils.transformations_utils import *
-from utils.data_loader import load_and_preprocess_data_unified, add_consecutive_segment_id
-from utils.run_har_experiments_function import *
+from src.utils import train_with_cm, mapping_activity
+from src.utils.log_config import setup_logging, logger
+from src.utils.focal_loss import FocalLoss, LabelSmoothingCrossEntropy, CombinedLoss
+from src.utils.figures import combine_kfold_confusion_matrices
+from src.utils.transformations import *
+from src.utils.transformations_utils import *
+from src.utils.data_loader import load_and_preprocess_data_unified, add_consecutive_segment_id
+from src.utils.run_har_experiments_function import *
 
 def parse_args():
     """

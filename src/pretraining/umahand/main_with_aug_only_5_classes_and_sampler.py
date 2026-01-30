@@ -9,22 +9,22 @@ import optuna.visualization as vis
 from torch.utils.data import DataLoader
 from optuna.pruners import MedianPruner
 
-from app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
+from src.app_config import PROJ_ROOT, RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST, REPORTS_DIR, FIGURES_DIR, MODELS_DIR
 sys.path.append(os.path.join(PROJ_ROOT, "HumanActivityRecognition"))
 
-import train_with_cm
+from src.utils import train_with_cm
 import src.utils.sliding_window_on_data as sliding_window_on_data
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset
+
 
 from src.run_config.run_config import SLIDING_WINDOW_LENGTH
 from src.run_config.run_config import NB_SENSOR_CHANNELS
 from src.run_config.run_config import SLIDING_WINDOW_STEP
 
-from utils.log_config import logger
-from utils.transformations import *
-from utils.transformations_utils import *
-from utils import data_preprocessing, init_weights
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn, create_weighted_sampler
+from src.utils.log_config import logger
+from src.utils.transformations import *
+from src.utils.transformations_utils import *
+from src.utils import data_preprocessing, init_weights
+from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn, create_weighted_sampler
 from src.pretraining.figures import plot_CM
 
 # Impostazione il seed per la riproducibilità
@@ -131,7 +131,7 @@ else:
         net = DeepConvLSTM()
 
         # Eseguo l'allenamento
-        best_f1_score = train_with_cm.train(net, train_loader, test_loader, epochs=100, batch_size=batch_size, lr=lr)
+        best_f1_score = train_with_cm.train(net, train_loader, test_loader, epochs=100, lr=lr, exp_figures_dir=FIGURES_DIR, exp_reports_dir=REPORTS_DIR)
 
         # Salva modello se è il migliore finora
         is_better = False

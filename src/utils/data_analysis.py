@@ -4,16 +4,16 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import sys
 from datetime import datetime
-from app_config import RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST
-from utils import data_preprocessing
+from src.app_config import RAW_DATA_DIR_TRAIN, RAW_DATA_DIR_TEST
+from src.utils import data_preprocessing
 from src.run_config.run_config import SLIDING_WINDOW_LENGTH
 from src.run_config.run_config import NB_SENSOR_CHANNELS
 from src.run_config.run_config import SLIDING_WINDOW_STEP
 import src.utils.sliding_window_on_data as sliding_window_on_data
-from app_config import FIGURES_DIR
+from src.app_config import FIGURES_DIR
 import json
 from typing import Dict, List, Any
-from utils.log_config import logger
+from src.utils.log_config import logger
 
 from scipy.stats import kstest, norm
 

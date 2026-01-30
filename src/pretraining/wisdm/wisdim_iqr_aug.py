@@ -15,20 +15,19 @@ from optuna.pruners import MedianPruner
 from optuna.visualization import plot_optimization_history as optuna_plot_history
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..', 'HumanActivityRecognition')))
 sys.path.append(os.path.abspath('HumanActivityRecognition'))
-from app_config import PROJ_ROOT, REPORTS_DIR, FIGURES_DIR, MODELS_DIR,  OUTPUT_WISDIM_DATA_DIR, SELECTED_ACTIVITIES, FS_TARGET, FS_ORIGINAL
+from src.app_config import PROJ_ROOT, REPORTS_DIR, FIGURES_DIR, MODELS_DIR,  OUTPUT_WISDIM_DATA_DIR, SELECTED_ACTIVITIES, FS_TARGET, FS_ORIGINAL
 
 
 import matplotlib.pyplot as plt
-from utils.transformations import *
-from utils.transformations_utils import *
+from src.utils.transformations import *
+from src.utils.transformations_utils import *
 from collections import defaultdict
 
 
-from utils import data_processing
-from utils import init_weights
-import train_with_cm
-from utils.log_config import logger
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn, create_weighted_sampler
+from src.utils import data_processing
+from src.utils import init_weights, train_with_cm
+from src.utils.log_config import logger
+from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset, collate_fn, create_weighted_sampler
 from src.pretraining.figures import plot_CM
 
 SEED = 42

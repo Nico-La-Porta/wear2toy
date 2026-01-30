@@ -4,7 +4,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
 import glob
 import optuna
 from optuna.pruners import MedianPruner
@@ -12,12 +11,12 @@ import optuna.visualization as vis
 from collections import defaultdict
 
 # Import project modules
-from app_config import REPORTS_DIR, FIGURES_DIR, MODELS_DIR
-from models.DeepConvLSTM import DeepConvLSTM, HARDataset
+from src.app_config import FIGURES_DIR
+from src.models.DeepConvLSTM import DeepConvLSTM, HARDataset
 import src.utils.sliding_window_on_data as sliding_window_on_data
-import train_with_cm
-from utils.log_config import logger
-from figures import plot_CM
+from src.utils import train_with_cm
+from src.utils.log_config import logger
+
 
 
 # Window parameters for sliding window

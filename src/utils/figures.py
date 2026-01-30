@@ -14,7 +14,7 @@ from collections import Counter
 import matplotlib.patches as mpatches
 
 
-from utils.log_config import logger
+from src.utils.log_config import logger
 from models.DeepConvLSTM import DeepConvLSTM, HARDataset
 
 # Configurazione dei parametri di stile per i grafici
