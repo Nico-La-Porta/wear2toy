@@ -75,14 +75,25 @@ pip install -r requirements.txt
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ## 📜 Citation
-Please use:
+Plain text:
+```
+N. La Porta, C. Di Maio, F. D. Faraci, B. Glaser, G. P. Ramelli and M. Papandrea, "Wear2Toy: Leveraging Wearable Devices for Hand-Held Objects Activity Recognition,"
+2026 IEEE International Conference on Pervasive Computing and Communications Workshops and other Affiliated Events (PerCom Workshops), Pisa, Italy, 2026,
+pp. 1-6, doi: 10.1109/PerComWorkshops68308.2026.11585463.
+```
+
+Bibtex:
 ```bibtex
-@inproceedings{laporta2026wear2toy,
-  title={Wear2Toy: Leveraging Wearable Devices for Hand-Held Objects Activity Recognition},
-  author={La Porta, Nicolò and Di Maio, Carolina and Faraci, Francesca D. and Bronwyn, Glaser and Ramelli, Gian Paolo and Papandrea, Michela},
-  booktitle={IEEE PerCom'26 Workshops proceedings},
-  pages={},
-  year={2026}
+@INPROCEEDINGS{laporta2026wear2toy,
+  author={La Porta, Nicolò and Di Maio, Carolina and Faraci, Francesca D. and Glaser, Bronwyn and Ramelli, Gian Paolo and Papandrea, Michela},
+  booktitle={2026 IEEE International Conference on Pervasive Computing and Communications Workshops and other Affiliated Events (PerCom Workshops)}, 
+  title={Wear2Toy: Leveraging Wearable Devices for Hand-Held Objects Activity Recognition}, 
+  year={2026},
+  volume={},
+  number={},
+  pages={1-6},
+  keywords={Pediatrics;Printing;Modeling;Toy manufacturing industry;Wearable devices;Autism;Hands;Training;Conferences;Human activity recognition;Human Activity Recognition;ASD;Transfer Learning;Wearable Devices;Hand-Held Devices},
+  doi={10.1109/PerComWorkshops68308.2026.11585463}
 }
 ```
 
